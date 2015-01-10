@@ -1,0 +1,13 @@
+* getdigicamdata.py
+
+This script gets data from the SD storage card of my digital camera
+to my computer. It rotates portrait format images and renames files
+according to my file name convention.
+
+Please note: this is a replacement for a quick-hack shell script: 
+https://github.com/novoid/getdigicamdata.sh
+
+It is part of a blog article, where I describe my work-flows on how I
+manage my photographs and more: http://karl-voit.at/managing-digital-photographs/
+
+

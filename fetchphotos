@@ -18,15 +18,89 @@ tries to notify user on success
 """
 
 import re, os, time, logging, sys
-from optparse import OptionParser
 from PIL import Image
 from PIL.ExifTags import TAGS
 
+from datetime import datetime
+from sys import exit, argv
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from time import time  ## for measuring execution time
+import ConfigParser  ## for configuration files
+
 
 # global variables
-PROG_VERSION = "0.0.1"
-FORMATSTRING = "%Y-%m-%d_%H:%M:%S"
-TEMP_FILENAME = "fetchfotos_temp_filename"
+PROG_VERSION_NUMBER = u"0.1"
+PROG_VERSION_DATE = u"2015-01-10"
+INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+EPILOG = u"\n\
+  :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
+  :license:    GPL v3 or any later version\n\
+  :URL:        https://github.com/novoid/getdigicamdata.py\n\
+  :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
+  :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
+
+
+def error_exit(errorcode):
+    """
+    Exits with return value of errorcode and prints to stderr.
+
+    @param errorcode: integer that will be reported as return value.
+    """
+
+    logger = logging.getLogger('lazyblorg.Utils.error_exit')
+    logger.debug("exiting with error code %s" % str(errorcode))
+
+    stdout.flush()
+    exit(errorcode)
+
+    
+def initialize_logging(identifier, verbose, quiet):
+    """Log handling and configuration"""
+
+    logger = logging.getLogger(identifier)
+
+    # create console handler and set level to debug
+    ch = logging.StreamHandler()
+
+    FORMAT = None
+    if verbose:
+        FORMAT = "%(levelname)-8s %(asctime)-15s %(message)s"
+        ch.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+    elif quiet:
+        FORMAT = "%(levelname)-8s %(message)s"
+        ch.setLevel(logging.ERROR)
+        logger.setLevel(logging.ERROR)
+    else:
+        FORMAT = "%(levelname)-8s %(message)s"
+        ch.setLevel(logging.INFO)
+        logger.setLevel(logging.INFO)
+
+    # create formatter
+    formatter = logging.Formatter(FORMAT)
+
+    # add formatter to ch
+    ch.setFormatter(formatter)
+
+    # add ch to logger
+    logger.addHandler(ch)
+
+    ## omit double output (default handler and my own handler):
+    logger.propagate = False
+
+    ## # "application" code
+    ## logger.debug("debug message")
+    ## logger.info("info message")
+    ## logger.warn("warn message")
+    ## logger.error("error message")
+    ## logger.critical("critical message")
+
+    logger.debug("logging initialized")
+
+    return logger
+
+
 
 # cmdline parsing
 USAGE = "\n\
@@ -36,20 +110,7 @@ FIXXME\n\
 \n\
 Run %prog --help for usage hints"
 
-# pylint: disable-msg=C0103
-parser = OptionParser(usage=USAGE)
-parser.add_option("-p", "--postprocess-only", dest="postprocessonly",
-                  action="store_true",
-                  help="just rotate, lowercase, and add timestamp in current directory")
-parser.add_option("-q", "--quiet", dest="quiet", action="store_true",
-                  help="do not output anything but just errors on console")
-parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
-                  help="enable verbose mode")
-parser.add_option("-s", "--dryrun", dest="dryrun", action="store_true",
-        help="enable dryrun mode: just simulate what would happen, do not modify files or directories")
-parser.add_option("--version", dest="version", action="store_true",
-                  help="display version and exit")
-(options, args) = parser.parse_args()
+
 
 
 def handle_logging():
@@ -145,6 +206,37 @@ def check_destdir():
 def main():
     """Main function [make pylint happy :)]"""
 
+    
+    mydescription = u"FIXXME. Please refer to \n" + \
+        "https://github.com/novoid/fetchphotos for more information."
+
+    parser = ArgumentParser(prog=argv[0],
+                                     formatter_class=RawDescriptionHelpFormatter,  ## keep line breaks in EPILOG and such
+                                     epilog=EPILOG,
+                                     description=mydescription)
+
+    parser.add_argument("-p", "--postprocess-only", dest="postprocessonly",
+                        action="store_true",
+                        help="Just rotate, lowercase, and add timestamp in current directory")
+    
+    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
+                        help="Enable quiet mode: only warnings and errors will be reported.")
+    
+    parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
+                        help="Enable verbose mode which is quite chatty - be warned.")
+    
+    parser.add_argument("-s", "--dryrun", dest="dryrun", action="store_true",
+                        help="Enable dryrun mode: just simulate what would happen, do not modify files or directories")
+    
+    parser.add_argument("--version", dest="version", action="store_true",
+                        help="Display version and exit.")
+    
+    options = parser.parse_args()
+
+    logging = initialize_logging("lazyblorg", options.verbose, options.quiet)
+
+
+    
     if options.version:
         print os.path.basename(sys.argv[0]) + " " + PROG_VERSION
         sys.exit(0)
