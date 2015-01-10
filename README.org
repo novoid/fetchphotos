@@ -1,4 +1,6 @@
-* getdigicamdata.py
+Be careful - this repository is in status Alpha!
+
+* fetchphotos
 
 This script gets data from the SD storage card of my digital camera
 to my computer. It rotates portrait format images and renames files
