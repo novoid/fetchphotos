@@ -41,20 +41,6 @@ EPILOG = u"\n\
   :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
 
 
-def error_exit(errorcode):
-    """
-    Exits with return value of errorcode and prints to stderr.
-
-    @param errorcode: integer that will be reported as return value.
-    """
-
-    logger = logging.getLogger('lazyblorg.Utils.error_exit')
-    logger.debug("exiting with error code %s" % str(errorcode))
-
-    stdout.flush()
-    exit(errorcode)
-
-    
 def initialize_logging(identifier, verbose, quiet):
     """Log handling and configuration"""
 
@@ -116,10 +102,10 @@ Run %prog --help for usage hints"
 def handle_logging():
     """Log handling and configuration"""
 
-    if options.verbose:
+    if args.verbose:
         FORMAT = "%(levelname)-8s %(asctime)-15s %(message)s"
         logging.basicConfig(level=logging.DEBUG, format=FORMAT)
-    elif options.quiet:
+    elif args.quiet:
         FORMAT = "%(levelname)-8s %(message)s"
         logging.basicConfig(level=logging.CRITICAL, format=FORMAT)
     else:
@@ -189,7 +175,7 @@ def rotate_picture_according_exif(filename):
         logging.debug("will rotate 90 degrees clockwise")
         rotate_and_save_picture(filename, image, 90)
     else:
-        logging.warn("Found unknown/unhandled orientation %s", orientation) 
+        logging.warn("Found unknown/unhandled orientation %s", orientation)
 
 
 
@@ -206,11 +192,11 @@ def check_destdir():
 def main():
     """Main function [make pylint happy :)]"""
 
-    
+
     mydescription = u"FIXXME. Please refer to \n" + \
         "https://github.com/novoid/fetchphotos for more information."
 
-    parser = ArgumentParser(prog=argv[0],
+    parser = ArgumentParser(prog=os.path.basename(argv[0]),
                                      formatter_class=RawDescriptionHelpFormatter,  ## keep line breaks in EPILOG and such
                                      epilog=EPILOG,
                                      description=mydescription)
@@ -218,33 +204,30 @@ def main():
     parser.add_argument("-p", "--postprocess-only", dest="postprocessonly",
                         action="store_true",
                         help="Just rotate, lowercase, and add timestamp in current directory")
-    
+
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
                         help="Enable quiet mode: only warnings and errors will be reported.")
-    
+
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
                         help="Enable verbose mode which is quite chatty - be warned.")
-    
+
     parser.add_argument("-s", "--dryrun", dest="dryrun", action="store_true",
                         help="Enable dryrun mode: just simulate what would happen, do not modify files or directories")
-    
-    parser.add_argument("--version", dest="version", action="store_true",
-                        help="Display version and exit.")
-    
-    options = parser.parse_args()
 
-    logging = initialize_logging("lazyblorg", options.verbose, options.quiet)
+    parser.add_argument("--version", action="version",
+                        version="%(prog) " + PROG_VERSION_NUMBER)
 
+    parser.add_argument("filelist", nargs="+")
 
-    
-    if options.version:
-        print os.path.basename(sys.argv[0]) + " " + PROG_VERSION
-        sys.exit(0)
+    args = parser.parse_args()
+
+    logging = initialize_logging("fetchphotos", args.verbose, args.quiet)
+
 
     if len(args) < 1:
         parser.error("invalid usage")
 
-    if ( options.verbose and options.quiet ):
+    if ( args.verbose and args.quiet ):
         parser.error("please use either verbose (--verbose) or quiet (-q) option")
 
     ## FIXXME: implement configuration entry (no cmd line option!)
@@ -253,8 +236,7 @@ def main():
     # log handling
     handle_logging()
 
-    filelist = args[0:]
-    logging.debug("filelist: [%s]" % filelist)
+    logging.debug("filelist: [%s]" % args.filelist)
 
     check_sourcedir()
     check_tempdir()
@@ -262,7 +244,7 @@ def main():
 
     ## FIXXME: notify user of download time
 
-    for filename in filelist:
+    for filename in args.filelist:
         if os.path.isfile(filename):
             logging.debug("----> is file: %s" % filename)
 
