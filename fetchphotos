@@ -17,22 +17,24 @@ tries to notify user on success
 
 """
 
-import re, os, time, logging, sys
+import os, time, logging, sys
 from PIL import Image
-from PIL.ExifTags import TAGS
+#from PIL.ExifTags import TAGS
 
+import shutil
+import tempfile
 from datetime import datetime
-from sys import exit, argv
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from time import time  ## for measuring execution time
-import ConfigParser  ## for configuration files
-
+#import ConfigParser  ## for configuration files
 
 # global variables
+
 PROG_VERSION_NUMBER = u"0.1"
 PROG_VERSION_DATE = u"2015-01-10"
 INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
+FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
+LOGGER_NAME = u"fetchphotos"
 EPILOG = u"\n\
   :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
   :license:    GPL v3 or any later version\n\
@@ -40,37 +42,39 @@ EPILOG = u"\n\
   :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
   :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
 
+# Acquire a logger with default setup, for early use
+fp_logger = logging.getLogger(LOGGER_NAME)
 
-def initialize_logging(identifier, verbose, quiet):
+def initialize_logging(verbose, quiet):
     """Log handling and configuration"""
 
-    logger = logging.getLogger(identifier)
+    logger = logging.getLogger(LOGGER_NAME)
 
     # create console handler and set level to debug
-    ch = logging.StreamHandler()
+    console_handler = logging.StreamHandler()
 
-    FORMAT = None
+    log_format = None
     if verbose:
-        FORMAT = "%(levelname)-8s %(asctime)-15s %(message)s"
-        ch.setLevel(logging.DEBUG)
+        log_format = "%(levelname)-8s %(asctime)-15s %(message)s"
+        console_handler.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
     elif quiet:
-        FORMAT = "%(levelname)-8s %(message)s"
-        ch.setLevel(logging.ERROR)
+        log_format = "%(levelname)-8s %(message)s"
+        console_handler.setLevel(logging.ERROR)
         logger.setLevel(logging.ERROR)
     else:
-        FORMAT = "%(levelname)-8s %(message)s"
-        ch.setLevel(logging.INFO)
+        log_format = "%(levelname)-8s %(message)s"
+        console_handler.setLevel(logging.INFO)
         logger.setLevel(logging.INFO)
 
     # create formatter
-    formatter = logging.Formatter(FORMAT)
+    formatter = logging.Formatter(log_format)
 
-    # add formatter to ch
-    ch.setFormatter(formatter)
+    # add formatter to console_handler
+    console_handler.setFormatter(formatter)
 
-    # add ch to logger
-    logger.addHandler(ch)
+    # add console_handler to logger
+    logger.addHandler(console_handler)
 
     ## omit double output (default handler and my own handler):
     logger.propagate = False
@@ -84,10 +88,6 @@ def initialize_logging(identifier, verbose, quiet):
 
     logger.debug("logging initialized")
 
-    return logger
-
-
-
 # cmdline parsing
 USAGE = "\n\
          %prog [options] FIXXME ...\n\
@@ -96,27 +96,10 @@ FIXXME\n\
 \n\
 Run %prog --help for usage hints"
 
-
-
-
-def handle_logging():
-    """Log handling and configuration"""
-
-    if args.verbose:
-        FORMAT = "%(levelname)-8s %(asctime)-15s %(message)s"
-        logging.basicConfig(level=logging.DEBUG, format=FORMAT)
-    elif args.quiet:
-        FORMAT = "%(levelname)-8s %(message)s"
-        logging.basicConfig(level=logging.CRITICAL, format=FORMAT)
-    else:
-        FORMAT = "%(message)s"
-        logging.basicConfig(level=logging.INFO, format=FORMAT)
-
-
 def get_timestamp_string(filename):
     """read out ctime or mtime of file and return timestamp"""
 
-    return time.strftime(formatstring, time.localtime(os.path.getctime(filename)))
+    return time.strftime(FORMATSTRING, time.localtime(os.path.getctime(filename)))
 
 
 
@@ -135,71 +118,78 @@ def get_jpeg_orientation(image):
     Report it if requested.
     """
     if hasattr(image, '_getexif'):
-        logging.debug("current image is an jpeg image")
+        fp_logger.debug("current image is an jpeg image")
         exiftags = image._getexif()
         ## fetch orientation tag, default = 1 (no rotation)
         orientation = exiftags.get(0x0112, 1)
-        #logging.debug("orientation is: %s", orientation)
+        #fp_logger.debug("orientation is: %s", orientation)
         ## indication of a portrait mode - swap width and height
         if orientation == 1:
-            logging.debug(
-                'exif orientation tag %s says: photo shot in normal (landscape) mode',
-                orientation)
+            fp_logger.debug(
+                'exif orientation tag %s says: %s',
+                orientation,
+                'photo shot in normal (landscape) mode')
         elif orientation == 6:
-            logging.debug(
-                'EXIF orientation tag %s says: photo shot in portrait mode with left side of JPEG is top',
-                orientation)
+            fp_logger.debug(
+                'EXIF orientation tag %s says: %s',
+                orientation,
+                'photo shot in portrait mode with left side of JPEG is top')
         elif orientation == 8:
-            logging.debug(
-                'EXIF orientation tag %s says: photo shot in portrait mode with right side of JPEG is top',
-                orientation)
+            fp_logger.debug(
+                'EXIF orientation tag %s says: %s',
+                orientation,
+                'photo shot in portrait mode with right side of JPEG is top')
         else:
-            logging.error('EXIF orientation not recognised!')
+            fp_logger.error('EXIF orientation not recognised!')
         return orientation
     else:
-        logging.error("current file is not an JPEG file with EXIF data")
+        fp_logger.error("current file is not an JPEG file with EXIF data")
 
 
 def rotate_and_save_picture(filename, image, degrees):
     """Rotate image by <degrees> and replace the original image with the rotated one.
     """
-    temp_filename = TEMP_FILENAME + filename
-    new_image = image.rotate(degrees, expand=True)
-    new_image.save(temp_filename)
-    os.remove(filename)
-    os.rename(temp_filename, filename)
+    with tempfile.NamedTemporaryFile() as tmpfile:
+        temp_filename = tmpfile.name
+        new_image = image.rotate(degrees, expand=True)
+        new_image.save(temp_filename)
+        os.remove(filename)
+        shutil.copy(temp_filename, filename)
 
 
 def rotate_picture_according_exif(filename):
     """Rotate image in <filename> according to its EXIF data
     """
-    logging.debug("rotate_picture_according_exif called with file %s", filename)
+    fp_logger.debug("rotate_picture_according_exif called with file %s", filename)
 
     image = Image.open(filename)
 
     orientation = get_jpeg_orientation(image)
 
     if orientation == 1:
-        logging.debug("no rotation required")
+        fp_logger.debug("no rotation required")
     elif orientation == 6:
-        logging.debug("will rotate 90 degrees counter clockwise")
+        fp_logger.debug("will rotate 90 degrees counter clockwise")
         rotate_and_save_picture(filename, image, -90)
     elif orientation == 8:
-        logging.debug("will rotate 90 degrees clockwise")
+        fp_logger.debug("will rotate 90 degrees clockwise")
         rotate_and_save_picture(filename, image, 90)
     else:
-        logging.warn("Found unknown/unhandled orientation %s", orientation)
+        fp_logger.warn("Found unknown/unhandled orientation %s", orientation)
 
 
 
 def check_sourcedir():
-    logging.debug("FIXXME: not implemented yet")
+    """Make sure the source directory is present."""
+    fp_logger.debug("FIXXME: not implemented yet")
 
 def check_tempdir():
-    logging.debug("FIXXME: not implemented yet")
+    """Make sure the temp directory is present."""
+    fp_logger.debug("FIXXME: not implemented yet")
 
 def check_destdir():
-    logging.debug("FIXXME: not implemented yet")
+    """Make sure the destination directory is present."""
+    fp_logger.debug("FIXXME: not implemented yet")
 
 
 def main():
@@ -209,8 +199,9 @@ def main():
     mydescription = u"FIXXME. Please refer to \n" + \
         "https://github.com/novoid/fetchphotos for more information."
 
-    parser = ArgumentParser(prog=os.path.basename(argv[0]),
-                            formatter_class=RawDescriptionHelpFormatter,  ## keep line breaks in EPILOG and such
+    parser = ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                            ## keep line breaks in EPILOG and such
+                            formatter_class=RawDescriptionHelpFormatter,
                             epilog=EPILOG,
                             description=mydescription)
 
@@ -225,20 +216,18 @@ def main():
                         help="Enable verbose mode which is quite chatty - be warned.")
 
     parser.add_argument("-s", "--dryrun", dest="dryrun", action="store_true",
-                        help="Enable dryrun mode: just simulate what would happen, do not modify files or directories")
+                        help=("Enable dryrun mode: just simulate what would happen, " +
+                              "do not modify files or directories"))
 
     parser.add_argument("--version", action="version",
-                        version="%(prog) " + PROG_VERSION_NUMBER)
+                        version="%(prog)s " + PROG_VERSION_NUMBER)
 
     parser.add_argument("filelist", nargs="+")
 
     args = parser.parse_args()
 
-    logging = initialize_logging("fetchphotos", args.verbose, args.quiet)
+    initialize_logging(args.verbose, args.quiet)
 
-
-    if len(args) < 1:
-        parser.error("invalid usage")
 
     if args.verbose and args.quiet:
         parser.error("please use either verbose (--verbose) or quiet (-q) option")
@@ -246,10 +235,7 @@ def main():
     ## FIXXME: implement configuration entry (no cmd line option!)
     no_lowercase = False
 
-    # log handling
-    handle_logging()
-
-    logging.debug("filelist: [%s]" % args.filelist)
+    fp_logger.debug("filelist: [%s]", args.filelist)
 
     check_sourcedir()
     check_tempdir()
@@ -259,7 +245,7 @@ def main():
 
     for filename in args.filelist:
         if os.path.isfile(filename):
-            logging.debug("----> is file: %s" % filename)
+            fp_logger.debug("----> is file: %s", filename)
 
             new_filename = get_timestamp_string(filename) + "_" + filename
 
@@ -267,7 +253,7 @@ def main():
                 new_filename = new_filename.lower()
 
             os.rename(filename, new_filename)
-            logging.info("%s  -->  %s", filename, new_filename)
+            fp_logger.info("%s  -->  %s", filename, new_filename)
 
             rotate_picture_according_exif(new_filename)
 
