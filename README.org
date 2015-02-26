@@ -12,4 +12,22 @@ https://github.com/novoid/getdigicamdata.sh
 It is part of a blog article, where I describe my work-flows on how I
 manage my photographs and more: http://karl-voit.at/managing-digital-photographs/
 
+** Usage
 
+
+*** Configuration
+
+In typical usage, fetchphotos will always get images from the same
+place, perform the same transformations, and rename the files the same
+way. It would be unnecessary and annoying to have to give fetchphotos
+the same settings each time it's run, so these settings can be stored
+in a configuration file that fetchphoto reads.
+
+You can use fetchphotos without a configuration file, but you would
+have to supply all the necessary directory locations with command line
+options. It is strongly recommended that one of the first things you
+do with fetchphotos is create a skeleton configuration file with:
+: fetchphotos --generate-config
+after which you can add the correct locations and other options.
+
+ 

@@ -16,16 +16,17 @@ tries to notify user on success
 :bugreports: <tools@Karl-Voit.at>
 
 """
-
-import os, time, logging, sys
-from PIL import Image
 #from PIL.ExifTags import TAGS
-
+from PIL import Image
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
+import codecs    # for handling Unicode content in config files
+import ctypes
+from datetime import datetime
+import ConfigParser  ## for configuration files
+import appdirs
+import os, time, logging, sys
 import shutil
 import tempfile
-from datetime import datetime
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
-#import ConfigParser  ## for configuration files
 
 # global variables
 
@@ -44,6 +45,71 @@ EPILOG = u"\n\
 
 # Acquire a logger with default setup, for early use
 fp_logger = logging.getLogger(LOGGER_NAME)
+
+def get_config_filename(args):
+    """Return the name of the configuration file.
+    Unless given on the command line, this will
+    vary by the operating system used.
+    """
+
+    if args.configfile:
+        return args.configfile
+    else:
+        return os.path.join(
+            appdirs.user_config_dir('fetchphotos', False),
+            'fetchphotos.cfg')
+
+def generate_configfile(cfgname):
+    """Create a skeleton configuration file, and its directory if needed."""
+    directory = os.path.dirname(cfgname)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    with open(cfgname, "w") as out:
+        out.write(u"""
+[General]
+
+# directory, where the digicam photos are located
+DIGICAMDIR=/path-to-images -- replace me!
+
+# (empty) directory, where the digicam photos are temporary stored for being processed
+TEMPDIR=/path-to-temporary-directory -- replace me!
+
+# directory, where the photos will be moved to
+DESTINATIONDIR=/path-to-destination -- replace me!
+
+
+[File_processing]
+
+# rotate the photos according to EXIF data saved from the digicam
+# can be one of 'true' or 'false'
+ROTATE_PHOTOS=true
+
+# add timestamp according to ISO 8601+ http://datestamp.org/index.shtml
+# can be one of 'true' or 'false'
+# example: if true, file 'foo.jpg' will end up in '2009-12-31_23:59:59_foo.jpg'
+ADD_TIMESTAMP=true
+
+# rename files to lowercase one
+# can be one of 'true' or 'false'
+# example: if true, file 'Foo.JPG' will end up in 'foo.jpg'
+LOWERCASE_FILENAME=true
+
+""")
+
+def get_config_parser(config_file_name):
+    """Convenient method for getting config object.
+    It sets the encoding, and complains about problems.
+    """
+    config = ConfigParser.SafeConfigParser()
+    try:
+        config.readfp(codecs.open(config_file_name, encoding='utf-8'))
+    except IOError, ex:
+        fp_logger.error("Can't open configuration file \"%s\": %s",
+                        config_file_name, ex)
+        raise
+
+    return config
 
 def initialize_logging(verbose, quiet):
     """Log handling and configuration"""
@@ -118,7 +184,7 @@ def get_jpeg_orientation(image):
     Report it if requested.
     """
     if hasattr(image, '_getexif'):
-        fp_logger.debug("current image is an jpeg image")
+        fp_logger.debug(u"current image is an jpeg image")
         exiftags = image._getexif()
         ## fetch orientation tag, default = 1 (no rotation)
         orientation = exiftags.get(0x0112, 1)
@@ -126,24 +192,24 @@ def get_jpeg_orientation(image):
         ## indication of a portrait mode - swap width and height
         if orientation == 1:
             fp_logger.debug(
-                'exif orientation tag %s says: %s',
+                u'exif orientation tag %s says: %s',
                 orientation,
-                'photo shot in normal (landscape) mode')
+                u'photo shot in normal (landscape) mode')
         elif orientation == 6:
             fp_logger.debug(
-                'EXIF orientation tag %s says: %s',
+                u'EXIF orientation tag %s says: %s',
                 orientation,
-                'photo shot in portrait mode with left side of JPEG is top')
+                u'photo shot in portrait mode with left side of JPEG is top')
         elif orientation == 8:
             fp_logger.debug(
-                'EXIF orientation tag %s says: %s',
+                u'EXIF orientation tag %s says: %s',
                 orientation,
-                'photo shot in portrait mode with right side of JPEG is top')
+                u'photo shot in portrait mode with right side of JPEG is top')
         else:
-            fp_logger.error('EXIF orientation not recognised!')
+            fp_logger.error(u'EXIF orientation not recognised!')
         return orientation
     else:
-        fp_logger.error("current file is not an JPEG file with EXIF data")
+        fp_logger.error(u"current file is not an JPEG file with EXIF data")
 
 
 def rotate_and_save_picture(filename, image, degrees):
@@ -160,36 +226,78 @@ def rotate_and_save_picture(filename, image, degrees):
 def rotate_picture_according_exif(filename):
     """Rotate image in <filename> according to its EXIF data
     """
-    fp_logger.debug("rotate_picture_according_exif called with file %s", filename)
+    fp_logger.debug(u"rotate_picture_according_exif called with file %s", filename)
 
     image = Image.open(filename)
 
     orientation = get_jpeg_orientation(image)
 
     if orientation == 1:
-        fp_logger.debug("no rotation required")
+        fp_logger.debug(u"no rotation required")
     elif orientation == 6:
-        fp_logger.debug("will rotate 90 degrees counter clockwise")
+        fp_logger.debug(u"will rotate 90 degrees counter clockwise")
         rotate_and_save_picture(filename, image, -90)
     elif orientation == 8:
-        fp_logger.debug("will rotate 90 degrees clockwise")
+        fp_logger.debug(u"will rotate 90 degrees clockwise")
         rotate_and_save_picture(filename, image, 90)
     else:
-        fp_logger.warn("Found unknown/unhandled orientation %s", orientation)
+        fp_logger.warn(u"Found unknown/unhandled orientation %s", orientation)
 
 
 
-def check_sourcedir():
+def check_sourcedir(config):
     """Make sure the source directory is present."""
-    fp_logger.debug("FIXXME: not implemented yet")
+    try:
+        digicamdir = config.get(u'General', u'DIGICAMDIR')
+        if digicamdir.startswith(u'/path-to'):
+            raise ValueError(u"You must set DIGICAMDIR to the name of the directory" +
+                             u" where the digicam photos are located (not /path-to-images)")
+        if not os.path.exists(digicamdir):
+            raise IOError(ctypes.get_errno(),
+                          u"The digicam photo directory \"{}\" does not exist".format(
+                              digicamdir))
+    except ConfigParser.NoOptionError, ex:
+        fp_logger.error(u"Can't find DIGICAMDIR setting in configuration file: %s",
+                        ex)
+        raise
 
-def check_tempdir():
+def check_tempdir(config):
     """Make sure the temp directory is present."""
-    fp_logger.debug("FIXXME: not implemented yet")
+    try:
+        tempdir = config.get(u'General', u'TEMPDIR')
+        if tempdir.startswith(u'/path-to'):
+            raise ValueError(u"You must set TEMPDIR to the name of the directory" +
+                             u" where the digicam photos are processed" +
+                             u" (not /path-to-temporary-directory)")
 
-def check_destdir():
+        if not os.path.exists(tempdir):
+            raise IOError(ctypes.get_errno(),
+                          u"The digicam temporary directory \"{}\" does not exist".format(
+                              tempdir))
+    except ConfigParser.NoOptionError, ex:
+        ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
+                      ex.message)
+        raise
+
+def check_destdir(config):
     """Make sure the destination directory is present."""
-    fp_logger.debug("FIXXME: not implemented yet")
+    try:
+        destdir = config.get(u'General', u'DESTINATIONDIR')
+        if destdir.startswith(u'/path-to'):
+            raise ValueError(u"You must set DESTINATIONDIR to the name of the directory" +
+                             u" where the digicam photos will be moved to" +
+                             u" (not /path-to-destination)")
+
+        if not os.path.exists(destdir):
+            raise IOError(ctypes.get_errno(),
+                          u"The digicam destination directory \"{}\" does not exist".format(
+                              destdir))
+
+    except ConfigParser.Error, ex:
+        ex.message = (u"Can't find DESTINATIONDIR setting in configuration file: %s"%ex +
+                      ex.message)
+        #fp_logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
+        raise
 
 
 def main():
@@ -209,6 +317,11 @@ def main():
                         action="store_true",
                         help="Just rotate, lowercase, and add timestamp in current directory")
 
+    parser.add_argument("-c", "--configfile", dest="configfile",
+                        help="Name of configuration file.")
+    parser.add_argument("--generate-configfile", dest="generate_configfile", action="store_true",
+                        help="Generate a skeleton configuration file.")
+
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
                         help="Enable quiet mode: only warnings and errors will be reported.")
 
@@ -222,7 +335,7 @@ def main():
     parser.add_argument("--version", action="version",
                         version="%(prog)s " + PROG_VERSION_NUMBER)
 
-    parser.add_argument("filelist", nargs="+")
+    parser.add_argument("filelist", nargs="*")
 
     args = parser.parse_args()
 
@@ -232,14 +345,27 @@ def main():
     if args.verbose and args.quiet:
         parser.error("please use either verbose (--verbose) or quiet (-q) option")
 
-    ## FIXXME: implement configuration entry (no cmd line option!)
-    no_lowercase = False
+    cfgfile = get_config_filename(args)
+
+    if args.generate_configfile:
+        generate_configfile(cfgfile)
+        fp_logger.info("Generated configuration file in \"%s\"", cfgfile)
+        sys.exit(0)
+
+    config = get_config_parser(cfgfile)
+
+    #print("Config is:")
+    #config.write(sys.stdout)
 
     fp_logger.debug("filelist: [%s]", args.filelist)
 
-    check_sourcedir()
-    check_tempdir()
-    check_destdir()
+    check_sourcedir(config)
+    check_tempdir(config)
+    check_destdir(config)
+
+    print("filelist: ", args.filelist)
+    sys.exit(0)
+
 
     ## FIXXME: notify user of download time
 
@@ -249,7 +375,7 @@ def main():
 
             new_filename = get_timestamp_string(filename) + "_" + filename
 
-            if not no_lowercase:
+            if config.getboolean('File_processing', 'LOWERCASE_FILENAME'):
                 new_filename = new_filename.lower()
 
             os.rename(filename, new_filename)
