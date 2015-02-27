@@ -89,7 +89,7 @@ ROTATE_PHOTOS=true
 
 # add timestamp according to ISO 8601+ http://datestamp.org/index.shtml
 # can be one of 'true' or 'false'
-# example: if true, file 'foo.jpg' will end up in '2009-12-31_23:59:59_foo.jpg'
+# example: if true, file 'foo.jpg' will end up in '2009-12-31T23.59.59_foo.jpg'
 ADD_TIMESTAMP=true
 
 # rename files to lowercase one
