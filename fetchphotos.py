@@ -1,23 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Latest change: Fri Mar 27 00:27:30 CET 2009
-"""
-fetchphotos
-~~~~~~~~~~~
 
-This script gets photos and movies from digicams,
-rotates photos according to EXIF data,
-adds timestamps,
-lowercases filenames, and
-tries to notify user on success
+DESCRIPTION = u"""This script gets photos and movies from digicams,\n\
+rotates photos according to EXIF data, adds timestamps,\n\
+lowercases filenames, and tries to notify user on success.\n\
+\n\
+Please refer to https://github.com/novoid/fetchphotos for more information.\n"""
 
-:copyright: (c) 2009 by Karl Voit <tools@Karl-Voit.at>
-:license: GPL v2 or any later version
-:bugreports: <tools@Karl-Voit.at>
-
-with great contributions from sesamemucho: https://github.com/novoid/fetchphotos/commits/master?author=sesamemucho
-
-"""
 #from PIL.ExifTags import TAGS
 from PIL import Image
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
@@ -314,14 +304,12 @@ def main():
     """Main function [make pylint happy :)]"""
 
 
-    mydescription = u"FIXXME. Please refer to \n" + \
-        "https://github.com/novoid/fetchphotos for more information."
 
     parser = ArgumentParser(prog=os.path.basename(sys.argv[0]),
                             ## keep line breaks in EPILOG and such
                             formatter_class=RawDescriptionHelpFormatter,
                             epilog=EPILOG,
-                            description=mydescription)
+                            description=DESCRIPTION)
 
     parser.add_argument("-p", "--postprocess-only", dest="postprocessonly",
                         action="store_true",
