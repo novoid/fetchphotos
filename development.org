@@ -1,5 +1,5 @@
 # -*- mode: org; coding: utf-8; -*-
-# Time-stamp: <2015-01-10 22:34:23 vk>
+# Time-stamp: <2015-02-27 10:47:55 vk>
 # This file is best viewed with GNU Emacs Org-mode: http://orgmode.org/
 
 * notes
@@ -106,7 +106,15 @@ make
 
 ** NEXT config: MOUNTPOINT
 
-** NEXT python and Growl
+** CANCELLED python and Growl                                                              :ARCHIVE:
+CLOSED: [2015-02-27 Fri 10:47]
+:PROPERTIES:
+:CREATED:  [2015-02-27 Fri 10:47]
+:END:
+:LOGBOOK:
+- State "CANCELLED"  from "NEXT"       [2015-02-27 Fri 10:47] \\
+  OS X is no primary target platform
+:END:
 
 http://growl.info/documentation/developer/python-support.php
 
