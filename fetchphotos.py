@@ -25,23 +25,31 @@ import codecs    # for handling Unicode content in config files
 import ctypes
 from datetime import datetime
 import ConfigParser  ## for configuration files
-import appdirs
 import os, time, logging, sys
+
+try:
+    import appdirs
+except ImportError:
+    print "Could not find Python module \"appdirs\".\nPlease install it, e.g., with \"sudo pip install appdirs\" or \"apt-get install python-appdirs\"."
+    sys.exit(1)
+
+
 import shutil
 import tempfile
 
 # global variables
 
-PROG_VERSION_NUMBER = u"0.1"
-PROG_VERSION_DATE = u"2015-01-10"
+PROG_VERSION_NUMBER = u"0.2"
+PROG_VERSION_DATE = u"2015-02-27"
 INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
 LOGGER_NAME = u"fetchphotos"
 EPILOG = u"\n\
   :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
+               contributions from sesamemucho https://tinyurl.com/nokhs6x\n\
   :license:    GPL v3 or any later version\n\
-  :URL:        https://github.com/novoid/getdigicamdata.py\n\
+  :URL:        https://github.com/novoid/fetchphotos\n\
   :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
   :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
 
