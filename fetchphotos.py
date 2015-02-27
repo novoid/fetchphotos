@@ -15,6 +15,8 @@ tries to notify user on success
 :license: GPL v2 or any later version
 :bugreports: <tools@Karl-Voit.at>
 
+with great contributions from sesamemucho: https://github.com/novoid/fetchphotos/commits/master?author=sesamemucho
+
 """
 #from PIL.ExifTags import TAGS
 from PIL import Image
