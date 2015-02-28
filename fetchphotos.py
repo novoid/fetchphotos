@@ -19,6 +19,7 @@ import os
 import time
 import logging
 import sys
+import tempfile  # for creating temporary directories
 
 try:
     import appdirs
@@ -77,9 +78,6 @@ def generate_configfile(cfgname):
 
 # directory, where the digicam photos are located
 DIGICAMDIR=/path-to-images -- replace me!
-
-# (empty) directory, where the digicam photos are temporary stored for being processed
-TEMPDIR=/path-to-temporary-directory -- replace me!
 
 # directory, where the photos will be moved to
 DESTINATIONDIR=/path-to-destination -- replace me!
@@ -269,23 +267,12 @@ def check_sourcedir(config):
         raise
 
 
-def check_tempdir(config):
-    """Make sure the temp directory is present."""
-    try:
-        tempdir = config.get(u'General', u'TEMPDIR')
-        if tempdir.startswith(u'/path-to'):
-            raise ValueError(u"You must set TEMPDIR to the name of the directory" +
-                             u" where the digicam photos are processed" +
-                             u" (not /path-to-temporary-directory)")
+def get_new_tempdir():
+    """Creates and returns a temporary directory.
 
-        if not os.path.exists(tempdir):
-            raise IOError(ctypes.get_errno(),
-                          u"The digicam temporary directory \"{}\" does not exist".format(
-                              tempdir))
-    except ConfigParser.NoOptionError, ex:
-        ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
-                      ex.message)
-        raise
+    @param return: a string containing the path to the temp directory"""
+
+    return tempfile.mkdtemp(prefix='tempfile_test_')
 
 
 def check_destdir(config):
@@ -364,13 +351,14 @@ def main():
     fp_logger.debug("filelist: [%s]", args.filelist)
 
     check_sourcedir(config)
-    check_tempdir(config)
     check_destdir(config)
 
     print("filelist: ", args.filelist)
     sys.exit(0)
 
     ## FIXXME: notify user of download time
+
+    tempdir = get_new_tempdir()
 
     for filename in args.filelist:
         if os.path.isfile(filename):
