@@ -1,5 +1,5 @@
 # -*- mode: org; coding: utf-8; -*-
-# Time-stamp: <2015-02-27 10:47:55 vk>
+# Time-stamp: <2015-02-28 11:35:20 vk>
 # This file is best viewed with GNU Emacs Org-mode: http://orgmode.org/
 
 * notes
@@ -7,7 +7,6 @@
 ** config file content
 
 - Mountpoint Digicam
-- temp-dir
 - dest-dir
 - do not rotate
 - do not add timestamp
@@ -22,14 +21,14 @@
 
 ** basic work-flow
 
-- [] check if data is in mountpoint
-- [] check destdir found
-- [] check tempdir found
-- [] notify user of dlownload-time
+- [ ] check if data is in mountpoint
+- [ ] check destdir found
+- [X] create tempdir
+- [ ] notify user of dlownload-time
 - [x] lower all filenames
 - [x] rotate JPEG
-- [] date2name
-- [] notify user: done
+- [ ] date2name
+- [ ] notify user: done
 
 * issues/tasks
 
@@ -97,15 +96,33 @@ make
 -> removing installed packages from above and continuing with PIL ;-)
 
 
+** CANCELLED config: TEMPDIR                                                               :ARCHIVE:
+CLOSED: [2015-02-28 Sat 11:34]
+:PROPERTIES:
+:CREATED:  [2015-02-28 Sat 11:34]
+:END:
+:LOGBOOK:
+- State "CANCELLED"  from "NEXT"       [2015-02-28 Sat 11:34] \\
+  using mkdtemp() instead
+:END:
 
-** NEXT config: TEMPDIR
+** DONE config: DESTDIR
+CLOSED: [2015-02-28 Sat 11:35]
+:PROPERTIES:
+:CREATED:  [2015-02-28 Sat 11:35]
+:END:
+:LOGBOOK:
+- State "DONE"       from "NEXT"       [2015-02-28 Sat 11:35]
+:END:
 
-** NEXT config: DESTDIR
-
-** NEXT lowerall in python
-
-** NEXT config: MOUNTPOINT
-
+** DONE config: MOUNTPOINT
+CLOSED: [2015-02-28 Sat 11:35]
+:PROPERTIES:
+:CREATED:  [2015-02-28 Sat 11:35]
+:END:
+:LOGBOOK:
+- State "DONE"       from "NEXT"       [2015-02-28 Sat 11:35]
+:END:
 ** CANCELLED python and Growl                                                              :ARCHIVE:
 CLOSED: [2015-02-27 Fri 10:47]
 :PROPERTIES:
@@ -118,5 +135,6 @@ CLOSED: [2015-02-27 Fri 10:47]
 
 http://growl.info/documentation/developer/python-support.php
 
+** NEXT lowerall in python
 ** NEXT python and notifications with Linux
 
