@@ -46,6 +46,7 @@ EPILOG = u"\n\
 # Acquire a logger with default setup, for early use
 fp_logger = logging.getLogger(LOGGER_NAME)
 
+
 def get_config_filename(args):
     """Return the name of the configuration file.
     Unless given on the command line, this will
@@ -58,6 +59,7 @@ def get_config_filename(args):
         return os.path.join(
             appdirs.user_config_dir('fetchphotos', False),
             'fetchphotos.cfg')
+
 
 def generate_configfile(cfgname):
     """Create a skeleton configuration file, and its directory if needed."""
@@ -97,6 +99,7 @@ LOWERCASE_FILENAME=true
 
 """)
 
+
 def get_config_parser(config_file_name):
     """Convenient method for getting config object.
     It sets the encoding, and complains about problems.
@@ -110,6 +113,7 @@ def get_config_parser(config_file_name):
         raise
 
     return config
+
 
 def initialize_logging(verbose, quiet):
     """Log handling and configuration"""
@@ -162,11 +166,11 @@ FIXXME\n\
 \n\
 Run %prog --help for usage hints"
 
+
 def get_timestamp_string(filename):
     """read out ctime or mtime of file and return timestamp"""
 
     return time.strftime(FORMATSTRING, time.localtime(os.path.getctime(filename)))
-
 
 
 ## http://sylvana.net/jpegcrop/exif_orientation.html
@@ -244,7 +248,6 @@ def rotate_picture_according_exif(filename):
         fp_logger.warn(u"Found unknown/unhandled orientation %s", orientation)
 
 
-
 def check_sourcedir(config):
     """Make sure the source directory is present."""
     try:
@@ -260,6 +263,7 @@ def check_sourcedir(config):
         fp_logger.error(u"Can't find DIGICAMDIR setting in configuration file: %s",
                         ex)
         raise
+
 
 def check_tempdir(config):
     """Make sure the temp directory is present."""
@@ -278,6 +282,7 @@ def check_tempdir(config):
         ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
                       ex.message)
         raise
+
 
 def check_destdir(config):
     """Make sure the destination directory is present."""
@@ -302,8 +307,6 @@ def check_destdir(config):
 
 def main():
     """Main function [make pylint happy :)]"""
-
-
 
     parser = ArgumentParser(prog=os.path.basename(sys.argv[0]),
                             ## keep line breaks in EPILOG and such
@@ -339,7 +342,6 @@ def main():
 
     initialize_logging(args.verbose, args.quiet)
 
-
     if args.verbose and args.quiet:
         parser.error("please use either verbose (--verbose) or quiet (-q) option")
 
@@ -364,7 +366,6 @@ def main():
     print("filelist: ", args.filelist)
     sys.exit(0)
 
-
     ## FIXXME: notify user of download time
 
     for filename in args.filelist:
@@ -380,9 +381,6 @@ def main():
             fp_logger.info("%s  -->  %s", filename, new_filename)
 
             rotate_picture_according_exif(new_filename)
-
-
-
 
 if __name__ == "__main__":
     try:
