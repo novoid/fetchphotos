@@ -14,13 +14,17 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 import codecs    # for handling Unicode content in config files
 import ctypes
 from datetime import datetime
-import ConfigParser  ## for configuration files
-import os, time, logging, sys
+import ConfigParser  # for configuration files
+import os
+import time
+import logging
+import sys
 
 try:
     import appdirs
 except ImportError:
-    print "Could not find Python module \"appdirs\".\nPlease install it, e.g., with \"sudo pip install appdirs\" or \"apt-get install python-appdirs\"."
+    print "Could not find Python module \"appdirs\".\nPlease install it, e.g., with \"sudo pip install appdirs\"" + \
+        " or \"apt-get install python-appdirs\"."
     sys.exit(1)
 
 
@@ -299,7 +303,7 @@ def check_destdir(config):
                               destdir))
 
     except ConfigParser.Error, ex:
-        ex.message = (u"Can't find DESTINATIONDIR setting in configuration file: %s"%ex +
+        ex.message = (u"Can't find DESTINATIONDIR setting in configuration file: %s" % ex +
                       ex.message)
         #fp_logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
         raise
