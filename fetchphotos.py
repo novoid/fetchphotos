@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Latest change: Fri Mar 27 00:27:30 CET 2009
-
-DESCRIPTION = u"""This script gets photos and movies from digicams,\n\
+"""This script gets photos and movies from digicams,\n\
 rotates photos according to EXIF data, adds timestamps,\n\
 lowercases filenames, and tries to notify user on success.\n\
 \n\
@@ -25,41 +24,56 @@ import time
 try:
     import appdirs
 except ImportError:
-    print "Could not find Python module \"appdirs\".\nPlease install it, e.g., with \"sudo pip install appdirs\" or \"apt-get install python-appdirs\"."
+    print "Could not find Python module \"appdirs\"."
+    print "Please install it, e.g., with \"sudo pip install appdirs\" " + \
+        "or \"apt-get install python-appdirs\"."
     sys.exit(1)
 
 # global variables
 
-PROG_VERSION_NUMBER = u"0.2"
-PROG_VERSION_DATE = u"2015-02-27"
-INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
-LOGGER_NAME = u"fetchphotos"
-EPILOG = u"\n\
-  :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
-               contributions from sesamemucho https://tinyurl.com/nokhs6x\n\
-  :license:    GPL v3 or any later version\n\
-  :URL:        https://github.com/novoid/fetchphotos\n\
-  :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
-  :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
-
-
 class Fetchphotos(object):
+    """This class encapsulates the functionality of the fetchphotos application"""
+
+    DESCRIPTION = __doc__
+
+    PROG_VERSION_NUMBER = u"0.2"
+    PROG_VERSION_DATE = u"2015-02-27"
+    INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
+    LOGGER_NAME = u"fetchphotos"
+    EPILOG = u"\n\
+    :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
+    contributions from sesamemucho https://tinyurl.com/nokhs6x\n\
+    :license:    GPL v3 or any later version\n\
+    :URL:        https://github.com/novoid/fetchphotos\n\
+    :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
+    :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
 
     def __init__(self, argv):
         self.argv = argv
 
-        self.args = self.parse_args(argv)
+        self.parse_args(argv)
 
         self.logger = self.initialize_logging()
 
+        cfgfile = self.get_config_filename()
+
+        if self.args.generate_configfile:
+            self.generate_configfile(cfgfile)
+            self.logger.info("Generated configuration file in \"%s\"", cfgfile)
+            sys.exit(0)
+
+        self.set_config_parser(cfgfile)
+
     def parse_args(self, argv):
+        """Handle the command line parsing."""
+
         parser = ArgumentParser(prog=os.path.basename(argv[0]),
                                 ## keep line breaks in EPILOG and such
                                 formatter_class=RawDescriptionHelpFormatter,
-                                epilog=EPILOG,
-                                description=DESCRIPTION)
+                                epilog=self.EPILOG,
+                                description=self.DESCRIPTION)
 
         parser.add_argument("-p", "--postprocess-only", dest="postprocessonly",
                             action="store_true",
@@ -67,7 +81,8 @@ class Fetchphotos(object):
 
         parser.add_argument("-c", "--configfile", dest="configfile",
                             help="Name of configuration file.")
-        parser.add_argument("--generate-configfile", dest="generate_configfile", action="store_true",
+        parser.add_argument("--generate-configfile", dest="generate_configfile",
+                            action="store_true",
                             help="Generate a skeleton configuration file.")
 
         parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
@@ -84,7 +99,7 @@ class Fetchphotos(object):
                                   "do not modify files or directories"))
 
         parser.add_argument("--version", action="version",
-                            version="%(prog)s " + PROG_VERSION_NUMBER)
+                            version="%(prog)s " + self.PROG_VERSION_NUMBER)
 
         parser.add_argument("filelist", nargs="*")
 
@@ -93,7 +108,7 @@ class Fetchphotos(object):
         if args.verbose and args.quiet:
             parser.error("please use either verbose (--verbose) or quiet (-q) option")
 
-        return args
+        self.args = args
 
     def get_config_filename(self):
         """Return the name of the configuration file.
@@ -110,6 +125,7 @@ class Fetchphotos(object):
 
     def generate_configfile(self, cfgname):
         """Create a skeleton configuration file, and its directory if needed."""
+        self.logger.debug(u"Generating configuration file \"%s\"", cfgname)
         directory = os.path.dirname(cfgname)
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -155,18 +171,17 @@ LOWERCASE_FILENAME=true
         try:
             config.readfp(codecs.open(config_file_name, encoding='utf-8'))
         except IOError:
-            self.logger.error(u"Can't open configuration file {}".format(
-                config_file_name))
+            self.logger.error(u"Can't open configuration file %s",
+                              config_file_name)
             raise
 
         self.config = config
-
         return config
 
     def initialize_logging(self):
         """Log handling and configuration"""
 
-        logger = logging.getLogger(LOGGER_NAME)
+        logger = logging.getLogger(self.LOGGER_NAME)
 
         # create console handler and set level to debug
         console_handler = logging.StreamHandler()
@@ -222,7 +237,7 @@ LOWERCASE_FILENAME=true
     def get_timestamp_string(self, filename):
         """read out ctime or mtime of file and return timestamp"""
 
-        return time.strftime(FORMATSTRING, time.localtime(os.path.getctime(filename)))
+        return time.strftime(self.FORMATSTRING, time.localtime(os.path.getctime(filename)))
 
 
 
@@ -272,6 +287,9 @@ LOWERCASE_FILENAME=true
     def rotate_and_save_picture(self, filename, image, degrees):
         """Rotate image by <degrees> and replace the original image with the rotated one.
         """
+        self.logger.debug(u"Rotating image by %s degrees, saving to %s",
+                          degrees, filename)
+
         with tempfile.NamedTemporaryFile() as tmpfile:
             temp_filename = tmpfile.name
             new_image = image.rotate(degrees, expand=True)
@@ -293,14 +311,12 @@ LOWERCASE_FILENAME=true
             self.logger.debug(u"no rotation required")
         elif orientation == 6:
             self.logger.debug(u"will rotate 90 degrees counter clockwise")
-            rotate_and_save_picture(filename, image, -90)
+            self.rotate_and_save_picture(filename, image, -90)
         elif orientation == 8:
             self.logger.debug(u"will rotate 90 degrees clockwise")
-            rotate_and_save_picture(filename, image, 90)
+            self.rotate_and_save_picture(filename, image, 90)
         else:
             self.logger.warn(u"Found unknown/unhandled orientation %s", orientation)
-
-
 
     def check_sourcedir(self):
         """Make sure the source directory is present."""
@@ -356,18 +372,8 @@ LOWERCASE_FILENAME=true
             #self.logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
             raise
 
-
     def main(self):
         """Main function [make pylint happy :)]"""
-
-        cfgfile = self.get_config_filename()
-
-        if self.args.generate_configfile:
-            self.generate_configfile(cfgfile)
-            self.logger.info("Generated configuration file in \"%s\"", cfgfile)
-            sys.exit(0)
-
-        self.set_config_parser(cfgfile)
 
         #print("Config is:")
         #config.write(sys.stdout)
@@ -382,14 +388,16 @@ LOWERCASE_FILENAME=true
 
         ## FIXXME: notify user of download time
 
+        tempdir = self.config.get(u'General', u'TEMPDIR')
+
         for filename in self.args.filelist:
             if os.path.isfile(filename):
-                dirn, filen = os.path.split(filename)
+                filen = os.path.basename(filename)
                 self.logger.debug("----> is file: %s", filename)
-                
+
                 new_filename = self.get_timestamp_string(filename) + "_" + filen
 
-                if config.getboolean('File_processing', 'LOWERCASE_FILENAME'):
+                if self.config.getboolean('File_processing', 'LOWERCASE_FILENAME'):
                     new_filename = new_filename.lower()
 
                 new_filename = os.path.join(tempdir, new_filename)
@@ -400,11 +408,14 @@ LOWERCASE_FILENAME=true
 
 
 
+def main(argv):
+    """Main routine for fetchphotos"""
+    fetchp = Fetchphotos(argv)
+    fetchp.main()
 
 if __name__ == "__main__":
     try:
-        fp = Fetchphotos(sys.argv)
-        fp.main()
+        main(sys.argv)
     except KeyboardInterrupt:
         logging.info("Received KeyboardInterrupt")
 

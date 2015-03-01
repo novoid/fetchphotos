@@ -11,18 +11,16 @@ This file contains the functional or acceptance tests for the fetchphotos projec
 
 ## invoke tests using the call_func_tests.sh script in this directory
 
+#pylint: disable=global-statement, invalid-name
+
 import argparse
-import ConfigParser
 from contextlib import contextmanager
 from contextlib import closing
 import StringIO
 import copy
-import logging
 import os
-import re
 import shutil
 import string
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -54,7 +52,7 @@ _keep_tempdir = False
 # Adapted from: http://stackoverflow.com/a/22434262
 @contextmanager
 def redirect_stdout_stderr(new_target, capture_stderr=False):
-
+    """Make unit tests be quiet"""
     if capture_stderr:
         old_stderr, sys.stderr = sys.stderr, new_target # replace sys.stdout
 
@@ -73,6 +71,7 @@ class TestMethods(unittest.TestCase):
 
     def setUp(self):
         """fetchphotos needs logging to be initialized"""
+        print "argv is", sys.argv
         self.tempdir = tempfile.mkdtemp()
         self.cfgfile = os.path.join(self.tempdir, u"config.cfg")
         shutil.copytree(u"./tests/testdata/example_images",
@@ -82,6 +81,7 @@ class TestMethods(unittest.TestCase):
         print "temp dir is:", self.tempdir
 
     def test_check_tempdir(self):
+        """Basic happy case with one specified file."""
         write_config_file(self.cfgfile, self.tempdir)
         # result = subprocess.check_output(["python", "fetchphotos.py", "-c", self.cfgfile],
         #                                  stderr=subprocess.STDOUT)
@@ -90,23 +90,19 @@ class TestMethods(unittest.TestCase):
         with closing(StringIO.StringIO()) as f, \
             redirect_stdout_stderr(f, capture_stderr=True):
 
-            try:
-                fp = fetchphotos.Fetchphotos(
-                    ["fetchphotos", '-c', self.cfgfile,
-                     os.path.join(self.tempdir,
-                                  u"src",
-                                  u"IMG_0533_normal_top_left.JPG")])
-                fp.main()
-                blarp = f.getvalue()
-            except:
-                blarp = f.getvalue()
+            fetchp = fetchphotos.Fetchphotos(
+                ["fetchphotos", '-c', self.cfgfile,
+                 os.path.join(self.tempdir,
+                              u"src",
+                              u"IMG_0533_normal_top_left.JPG")])
+            fetchp.main()
+            blarp = f.getvalue()
 
         print "output is:", blarp
 
         self.assertEqual(1, 1)
 
     def tearDown(self):
-        print "in tearDown, keep_tempdir is:", _keep_tempdir
         if not _keep_tempdir:
             shutil.rmtree(self.tempdir)
 
@@ -126,6 +122,7 @@ def write_config_file(fname, tdir):
 
 
 def main():
+    """Main routine for functional unit tests"""
     global _keep_tempdir
     # This handy code from http://stackoverflow.com/a/17259773
     parser = argparse.ArgumentParser(add_help=False)
