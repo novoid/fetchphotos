@@ -14,6 +14,7 @@ This file contains the unit tests for the fetchphotos project.
 import ConfigParser
 import fetchphotos
 import logging
+import os
 import re
 import types
 import unittest
@@ -36,22 +37,19 @@ import unittest
 def null_routine(self):
     pass
 
+def short_initialize(self):
+    self._cfgname = self.get_config_filename()
+
 class TestConfigMethods(unittest.TestCase):
     """Unit tests for low-level methods in fetchphotos.py"""
     def setUp(self):
         """fetchphotos needs logging to be initialized"""
+        logging.basicConfig(level = logging.DEBUG)
         self.logger = logging.getLogger(u"Tester")
         self.logger.setLevel(logging.CRITICAL)
-        #old_init = fetchphotos.FetchphotosConfig.initialize
-        #fetchphotos.FetchphotosConfig.initialize = null_routine
-
-        #print "old_init:", old_init
-        #print "null_routine:", null_routine
-
-        #self.fcfg = fetchphotos.FetchphotosConfig(logger, "
-        #   fetchphotos.fp_logger.setLevel(logging.CRITICAL)
 
     def test_check_getconfig(self):
+        logging.basicConfig(level = logging.DEBUG)
         """Complain if the configuration file doesn't exist."""
 
         with self.assertRaisesRegexp(IOError, u'No such file or directory:'):
@@ -61,11 +59,34 @@ class TestConfigMethods(unittest.TestCase):
         with self.assertRaisesRegexp(IOError, u'No such file or directory:'):
             fpc = fetchphotos.FetchphotosConfig(self.logger, u"«boo»")
 
-    def test_check_tempdir(self):
-        self.assertEqual(1, 1)
-
     def tearDown(self):
         pass
+
+class TestConfigMethodsWithoutInit(unittest.TestCase):
+    """Unit tests for low-level methods in fetchphotos.py"""
+    def setUp(self):
+        """fetchphotos needs logging to be initialized"""
+        logging.basicConfig(level = logging.DEBUG)
+        self.logger = logging.getLogger(u"Tester")
+
+        self.logger.setLevel(logging.CRITICAL)
+
+        self.old_init = fetchphotos.FetchphotosConfig.initialize
+        fetchphotos.FetchphotosConfig.initialize = short_initialize
+        self.gone_files = list()
+
+    def test_gen_config(self):
+        """Make sure generate_configfile works"""
+
+        fpc = fetchphotos.FetchphotosConfig(self.logger, u"«boo»", gen_file=True)
+        self.assertTrue(os.path.isfile(u"«boo»"))
+        self.gone_files.append(u"«boo»")
+
+    def tearDown(self):
+        fetchphotos.FetchphotosConfig.initialize = self.old_init
+        for file in self.gone_files:
+            if os.path.isfile(file):
+                os.unlink(file)
 
 class TestConfigCheckers(unittest.TestCase):
     """Test the behavior of the configuration file parser"""
@@ -73,7 +94,9 @@ class TestConfigCheckers(unittest.TestCase):
         """fetchphotos needs logging to be initialized.
         These tests also need a config object.
         """
+        logging.basicConfig(level = logging.DEBUG)
         self.logger = logging.getLogger(u"Tester")
+
         self.logger.setLevel(logging.CRITICAL)
         self.old_init = fetchphotos.FetchphotosConfig.initialize
         fetchphotos.FetchphotosConfig.initialize = null_routine

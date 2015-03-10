@@ -32,10 +32,15 @@ except ImportError:
 class FetchphotosConfig(object):
     """Handles configuration parsing for Fetchphotos"""
 
-    def __init__(self, logger, filename):
+    def __init__(self, logger, filename, gen_file=False):
         self.logger = logger
         self.requested_filename = filename
+        self.gen_file = gen_file
+        self._cfgname = None
+        self.config = None
         self.initialize()
+        if self.gen_file:
+            self.generate_configfile()
 
     def initialize(self):
         self._cfgname = self.get_config_filename()
@@ -48,8 +53,7 @@ class FetchphotosConfig(object):
     def get_config_filename(self):
         """Return the name of the configuration file.
         Unless given on the command line, this will
-        vary by the operating system used.
-        """
+        vary by the operating system used.        """
         if self.requested_filename:
             cfgname = self.requested_filename
         else:
@@ -74,7 +78,8 @@ class FetchphotosConfig(object):
         """Create a skeleton configuration file, and its directory if needed."""
         self.logger.debug(u"Generating configuration file \"%s\"", self.cfgname())
         directory = os.path.dirname(self.cfgname())
-        if not os.path.exists(directory):
+
+        if directory and not os.path.exists(directory):
             os.makedirs(directory)
 
         with open(self.cfgname(), "w") as out:
@@ -205,15 +210,6 @@ class Fetchphotos(object):
         self.logger = self.initialize_logging()
 
         self.cfg = FetchphotosConfig(self.logger, self.args.configfile)
-
-        # cfgfile = self.get_config_filename()
-
-        if self.args.generate_configfile:
-            self.cfg.generate_configfile()
-            self.logger.info("Generated configuration file in \"%s\"", self.cfg.cfgname())
-            sys.exit(0)
-
-        self.set_config_parser(cfgfile)
 
     def parse_args(self, argv):
         """Handle the command line parsing."""
@@ -410,7 +406,7 @@ class Fetchphotos(object):
 
         ## FIXXME: notify user of download time
 
-        tempdir = self.config.get(u'General', u'TEMPDIR')
+        tempdir = self.cfg.get(u'General', u'TEMPDIR')
 
         for filename in self.args.filelist:
             if os.path.isfile(filename):
@@ -419,7 +415,7 @@ class Fetchphotos(object):
 
                 new_filename = self.get_timestamp_string(filename) + "_" + filen
 
-                if self.config.getboolean('File_processing', 'LOWERCASE_FILENAME'):
+                if self.cfg.getboolean('File_processing', 'LOWERCASE_FILENAME'):
                     new_filename = new_filename.lower()
 
                 new_filename = os.path.join(tempdir, new_filename)
