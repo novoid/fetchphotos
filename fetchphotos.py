@@ -29,108 +29,55 @@ except ImportError:
         "or \"apt-get install python-appdirs\"."
     sys.exit(1)
 
-# global variables
+class FetchphotosConfig(object):
+    """Handles configuration parsing for Fetchphotos"""
 
-class Fetchphotos(object):
-    """This class encapsulates the functionality of the fetchphotos application"""
+    def __init__(self, logger, filename):
+        self.logger = logger
+        self.requested_filename = filename
+        self.initialize()
 
-    DESCRIPTION = __doc__
+    def initialize(self):
+        self._cfgname = self.get_config_filename()
+        self.config = self.set_config_parser()
 
-    PROG_VERSION_NUMBER = u"0.2"
-    PROG_VERSION_DATE = u"2015-02-27"
-    INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-    FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
-    LOGGER_NAME = u"fetchphotos"
-    EPILOG = u"\n\
-    :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
-    contributions from sesamemucho https://tinyurl.com/nokhs6x\n\
-    :license:    GPL v3 or any later version\n\
-    :URL:        https://github.com/novoid/fetchphotos\n\
-    :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
-    :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
-
-    def __init__(self, argv):
-        self.argv = argv
-
-        self.parse_args(argv)
-
-        self.logger = self.initialize_logging()
-
-        cfgfile = self.get_config_filename()
-
-        if self.args.generate_configfile:
-            self.generate_configfile(cfgfile)
-            self.logger.info("Generated configuration file in \"%s\"", cfgfile)
-            sys.exit(0)
-
-        self.set_config_parser(cfgfile)
-
-    def parse_args(self, argv):
-        """Handle the command line parsing."""
-
-        parser = ArgumentParser(prog=os.path.basename(argv[0]),
-                                ## keep line breaks in EPILOG and such
-                                formatter_class=RawDescriptionHelpFormatter,
-                                epilog=self.EPILOG,
-                                description=self.DESCRIPTION)
-
-        parser.add_argument("-p", "--postprocess-only", dest="postprocessonly",
-                            action="store_true",
-                            help="Just rotate, lowercase, and add timestamp in current directory")
-
-        parser.add_argument("-c", "--configfile", dest="configfile",
-                            help="Name of configuration file.")
-        parser.add_argument("--generate-configfile", dest="generate_configfile",
-                            action="store_true",
-                            help="Generate a skeleton configuration file.")
-
-        parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
-                            help="Enable quiet mode: only warnings and errors will be reported.")
-
-        parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
-                            help="Enable verbose mode which is quite chatty - be warned.")
-
-        parser.add_argument("--loglevel", dest="loglevel", action="store",
-                            help="Set the log level")
-
-        parser.add_argument("-s", "--dryrun", dest="dryrun", action="store_true",
-                            help=("Enable dryrun mode: just simulate what would happen, " +
-                                  "do not modify files or directories"))
-
-        parser.add_argument("--version", action="version",
-                            version="%(prog)s " + self.PROG_VERSION_NUMBER)
-
-        parser.add_argument("filelist", nargs="*")
-
-        args = parser.parse_args(argv[1:])
-
-        if args.verbose and args.quiet:
-            parser.error("please use either verbose (--verbose) or quiet (-q) option")
-
-        self.args = args
+        self.check_sourcedir()
+        self.check_tempdir()
+        self.check_destdir()
 
     def get_config_filename(self):
         """Return the name of the configuration file.
         Unless given on the command line, this will
         vary by the operating system used.
         """
-
-        if self.args.configfile:
-            return self.args.configfile
+        if self.requested_filename:
+            cfgname = self.requested_filename
         else:
-            return os.path.join(
+            cfgname = os.path.join(
                 appdirs.user_config_dir('fetchphotos', False),
                 'fetchphotos.cfg')
 
-    def generate_configfile(self, cfgname):
+        self.logger.debug(u"Returning configuration filename %s", cfgname)
+
+        return cfgname
+
+    def get(self, *args):
+        return self.config.get(*args)
+
+    def getboolean(self, *args):
+        return self.config.getboolean(*args)
+
+    def cfgname(self):
+        return self._cfgname
+
+    def generate_configfile(self):
         """Create a skeleton configuration file, and its directory if needed."""
-        self.logger.debug(u"Generating configuration file \"%s\"", cfgname)
-        directory = os.path.dirname(cfgname)
+        self.logger.debug(u"Generating configuration file \"%s\"", self.cfgname())
+        directory = os.path.dirname(self.cfgname())
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        with open(cfgname, "w") as out:
+        with open(self.cfgname(), "w") as out:
             out.write(u"""
 [General]
 
@@ -162,21 +109,156 @@ LOWERCASE_FILENAME=true
 
 """)
 
-    def set_config_parser(self, config_file_name):
+    def set_config_parser(self):
         """Convenient method for getting config object.
         It sets the encoding, and complains about problems.
         """
         config = ConfigParser.SafeConfigParser()
 
         try:
-            config.readfp(codecs.open(config_file_name, encoding='utf-8'))
+            config.readfp(codecs.open(self.cfgname(), encoding='utf-8'))
         except IOError:
             self.logger.error(u"Can't open configuration file %s",
-                              config_file_name)
+                              self.cfgname())
             raise
 
-        self.config = config
         return config
+
+    def check_sourcedir(self):
+        """Make sure the source directory is present."""
+        try:
+            digicamdir = self.get(u'General', u'DIGICAMDIR')
+            if digicamdir.startswith(u'/path-to'):
+                raise ValueError(u"You must set DIGICAMDIR to the name of the directory" +
+                                 u" where the digicam photos are located (not /path-to-images)")
+            if not os.path.exists(digicamdir):
+                raise IOError(ctypes.get_errno(),
+                              u"The digicam photo directory \"{}\" does not exist".format(
+                                  digicamdir))
+        except ConfigParser.NoOptionError, ex:
+            ex.message = (u"Can't find DIGICAMDIR setting in configuration file: " +
+                          ex.message)
+            raise
+
+    def check_tempdir(self):
+        """Make sure the temp directory is present."""
+        try:
+            tempdir = self.get(u'General', u'TEMPDIR')
+            if tempdir.startswith(u'/path-to'):
+                raise ValueError(u"You must set TEMPDIR to the name of the directory" +
+                                 u" where the digicam photos are processed" +
+                                 u" (not /path-to-temporary-directory)")
+
+            if not os.path.exists(tempdir):
+                raise IOError(ctypes.get_errno(),
+                              u"The digicam temporary directory \"{}\" does not exist".format(
+                                  tempdir))
+        except ConfigParser.NoOptionError, ex:
+            ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
+                          ex.message)
+            raise
+
+    def check_destdir(self):
+        """Make sure the destination directory is present."""
+        try:
+            destdir = self.get(u'General', u'DESTINATIONDIR')
+            if destdir.startswith(u'/path-to'):
+                raise ValueError(u"You must set DESTINATIONDIR to the name of the directory" +
+                                 u" where the digicam photos will be moved to" +
+                                 u" (not /path-to-destination)")
+
+            if not os.path.exists(destdir):
+                raise IOError(ctypes.get_errno(),
+                              u"The digicam destination directory \"{}\" does not exist".format(
+                                  destdir))
+
+        except ConfigParser.Error, ex:
+            ex.message = (u"Can't find DESTINATIONDIR setting in configuration file: %s"%ex +
+                          ex.message)
+            #self.logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
+            raise
+
+class Fetchphotos(object):
+    """This class encapsulates the functionality of the fetchphotos application"""
+
+    DESCRIPTION = __doc__
+
+    PROG_VERSION_NUMBER = u"0.2"
+    PROG_VERSION_DATE = u"2015-02-27"
+    INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
+    LOGGER_NAME = u"fetchphotos"
+    EPILOG = u"\n\
+    :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
+    contributions from sesamemucho https://tinyurl.com/nokhs6x\n\
+    :license:    GPL v3 or any later version\n\
+    :URL:        https://github.com/novoid/fetchphotos\n\
+    :bugreports: via github (preferred) or <tools@Karl-Voit.at>\n\
+    :version:    " + PROG_VERSION_NUMBER + " from " + PROG_VERSION_DATE + "\n"
+
+    def __init__(self, argv):
+        self.argv = argv
+
+        self.parse_args(argv)
+
+        self.logger = self.initialize_logging()
+
+        self.cfg = FetchphotosConfig(self.logger, self.args.configfile)
+
+        # cfgfile = self.get_config_filename()
+
+        if self.args.generate_configfile:
+            self.cfg.generate_configfile()
+            self.logger.info("Generated configuration file in \"%s\"", self.cfg.cfgname())
+            sys.exit(0)
+
+        self.set_config_parser(cfgfile)
+
+    def parse_args(self, argv):
+        """Handle the command line parsing."""
+
+        parser = ArgumentParser(prog=os.path.basename(argv[0]),
+                                ## keep line breaks in EPILOG and such
+                                formatter_class=RawDescriptionHelpFormatter,
+                                epilog=self.EPILOG,
+                                description=self.DESCRIPTION)
+
+        parser.add_argument("-p", "--postprocess-only", dest="postprocessonly",
+                            action="store_true",
+                            help="Just rotate, lowercase, and add timestamp in current directory")
+
+        parser.add_argument("-c", "--configfile", dest="configfile",
+                            help="Name of configuration file.")
+        parser.add_argument("--generate-configfile", dest="generate_configfile",
+                            action="store_true",
+                            help="Generate a skeleton configuration file.")
+
+        parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
+                            help="Enable quiet mode: only warnings and errors will be reported.")
+
+        parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
+                            help="Enable verbose mode which is quite chatty - be warned.")
+
+        parser.add_argument("--loglevel", dest="loglevel", action="store",
+                            default="INFO",
+                            help="Set the log level")
+
+        parser.add_argument("-s", "--dryrun", dest="dryrun", action="store_true",
+                            help=("Enable dryrun mode: just simulate what would happen, " +
+                                  "do not modify files or directories"))
+
+        parser.add_argument("--version", action="version",
+                            version="%(prog)s " + self.PROG_VERSION_NUMBER)
+
+        parser.add_argument("filelist", nargs="*")
+
+        args = parser.parse_args(argv[1:])
+
+        if args.verbose and args.quiet:
+            parser.error("please use either verbose (--verbose) or quiet (-q) option")
+
+        self.args = args
 
     def initialize_logging(self):
         """Log handling and configuration"""
@@ -318,60 +400,6 @@ LOWERCASE_FILENAME=true
         else:
             self.logger.warn(u"Found unknown/unhandled orientation %s", orientation)
 
-    def check_sourcedir(self):
-        """Make sure the source directory is present."""
-        try:
-            digicamdir = self.config.get(u'General', u'DIGICAMDIR')
-            if digicamdir.startswith(u'/path-to'):
-                raise ValueError(u"You must set DIGICAMDIR to the name of the directory" +
-                                 u" where the digicam photos are located (not /path-to-images)")
-            if not os.path.exists(digicamdir):
-                raise IOError(ctypes.get_errno(),
-                              u"The digicam photo directory \"{}\" does not exist".format(
-                                  digicamdir))
-        except ConfigParser.NoOptionError, ex:
-            ex.message = (u"Can't find DIGICAMDIR setting in configuration file: " +
-                          ex.message)
-            raise
-
-    def check_tempdir(self):
-        """Make sure the temp directory is present."""
-        try:
-            tempdir = self.config.get(u'General', u'TEMPDIR')
-            if tempdir.startswith(u'/path-to'):
-                raise ValueError(u"You must set TEMPDIR to the name of the directory" +
-                                 u" where the digicam photos are processed" +
-                                 u" (not /path-to-temporary-directory)")
-
-            if not os.path.exists(tempdir):
-                raise IOError(ctypes.get_errno(),
-                              u"The digicam temporary directory \"{}\" does not exist".format(
-                                  tempdir))
-        except ConfigParser.NoOptionError, ex:
-            ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
-                          ex.message)
-            raise
-
-    def check_destdir(self):
-        """Make sure the destination directory is present."""
-        try:
-            destdir = self.config.get(u'General', u'DESTINATIONDIR')
-            if destdir.startswith(u'/path-to'):
-                raise ValueError(u"You must set DESTINATIONDIR to the name of the directory" +
-                                 u" where the digicam photos will be moved to" +
-                                 u" (not /path-to-destination)")
-
-            if not os.path.exists(destdir):
-                raise IOError(ctypes.get_errno(),
-                              u"The digicam destination directory \"{}\" does not exist".format(
-                                  destdir))
-
-        except ConfigParser.Error, ex:
-            ex.message = (u"Can't find DESTINATIONDIR setting in configuration file: %s"%ex +
-                          ex.message)
-            #self.logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
-            raise
-
     def main(self):
         """Main function [make pylint happy :)]"""
 
@@ -379,12 +407,6 @@ LOWERCASE_FILENAME=true
         #config.write(sys.stdout)
 
         self.logger.debug("filelist: [%s]", self.args.filelist)
-
-        self.check_sourcedir()
-        self.check_tempdir()
-        self.check_destdir()
-
-        print("filelist: ", self.args.filelist)
 
         ## FIXXME: notify user of download time
 
