@@ -89,12 +89,13 @@ class FetchphotosConfig(object):
 # directory, where the digicam photos are located
 DIGICAMDIR=/path-to-images -- replace me!
 
-# (empty) directory, where the digicam photos are temporary stored for being processed
-TEMPDIR=/path-to-temporary-directory -- replace me!
-
 # directory, where the photos will be moved to
 DESTINATIONDIR=/path-to-destination -- replace me!
 
+# directory where the digicam photos are temporary stored for being
+# processed If not specified, fetchphotos will use a
+# system-appropriate directory for its temporary files.
+TEMPDIR=
 
 [File_processing]
 
@@ -105,6 +106,8 @@ ROTATE_PHOTOS=true
 # add timestamp according to ISO 8601+ http://datestamp.org/index.shtml
 # can be one of 'true' or 'false'
 # example: if true, file 'foo.jpg' will end up in '2009-12-31T23.59.59_foo.jpg'
+# Note that the time used comes from the EXIF metadata in the image, if available,
+# and from the creation date of the image file otherwise.
 ADD_TIMESTAMP=true
 
 # rename files to lowercase one
@@ -149,7 +152,9 @@ LOWERCASE_FILENAME=true
         """Make sure the temp directory is present."""
         try:
             tempdir = self.get(u'General', u'TEMPDIR')
-            if tempdir.startswith(u'/path-to'):
+            if tempdir == "":
+                tempdir = tempfile.gettempdir()
+            elif tempdir.startswith(u'/path-to'):
                 raise ValueError(u"You must set TEMPDIR to the name of the directory" +
                                  u" where the digicam photos are processed" +
                                  u" (not /path-to-temporary-directory)")
@@ -406,7 +411,7 @@ class Fetchphotos(object):
 
         ## FIXXME: notify user of download time
 
-        tempdir = self.cfg.get(u'General', u'TEMPDIR')
+        tempdir = tempfile.gettempdir()
 
         for filename in self.args.filelist:
             if os.path.isfile(filename):
