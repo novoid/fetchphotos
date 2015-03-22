@@ -15,6 +15,7 @@ import ConfigParser  ## for configuration files
 import codecs    # for handling Unicode content in config files
 import ctypes
 import fnmatch
+import itertools
 import logging
 import os
 import shutil
@@ -272,7 +273,7 @@ class Fetchphotos(object):
                             action="store_true",
                             help=("Enable developer debug mode -- " +
                                   "you probably don't want to use " +
-                                  "this")
+                                  "this"))
 
         parser.add_argument("--version", action="version",
                             version="%(prog)s " + self.PROG_VERSION_NUMBER)
@@ -398,32 +399,30 @@ class Fetchphotos(object):
         self.logger.debug(u"Rotating image by %s degrees, saving to %s",
                           degrees, filename)
 
-        with tempfile.NamedTemporaryFile(dir=self.cfg.get_tempdir()) as tmpfile:
-            temp_filename = tmpfile.name
-            new_image = image.rotate(degrees, expand=True)
-            new_image.save(temp_filename)
-            shutil.copy(temp_filename, filename)
+        new_image = image.rotate(degrees, expand=True)
+        new_image.save(filename)
 
-
-    def rotate_picture_according_exif(self, filename):
+    def rotate_and_copy_picture_according_exif(self, source_filename, dest_filename):
         """Rotate image in <filename> according to its EXIF data
         """
-        self.logger.debug(u"rotate_picture_according_exif called with file %s", filename)
+        self.logger.debug(u"rotate_picture_according_exif called with file %s", source_filename)
 
-        image = Image.open(filename)
+        image = Image.open(source_filename)
 
         orientation = self.get_jpeg_orientation(image)
 
         if orientation == 1:
             self.logger.debug(u"no rotation required")
+            shutil.copy(source_filename, dest_filename)
         elif orientation == 6:
             self.logger.debug(u"will rotate 90 degrees counter clockwise")
-            self.rotate_and_save_picture(filename, image, -90)
+            self.rotate_and_save_picture(dest_filename, image, -90)
         elif orientation == 8:
             self.logger.debug(u"will rotate 90 degrees clockwise")
-            self.rotate_and_save_picture(filename, image, 90)
+            self.rotate_and_save_picture(dest_filename, image, 90)
         else:
-            self.logger.warn(u"Found unknown/unhandled orientation %s", orientation)
+            self.logger.warn(u"Found unknown/unhandled orientation %s -- orientation not changed", orientation)
+            shutil.copy(source_filename, dest_filename)
 
     def get_filenames_to_process(self):
         """Get a list of the files that should be copied.
@@ -460,15 +459,9 @@ class Fetchphotos(object):
             if self.cfg.getboolean('File_processing', 'LOWERCASE_FILENAME'):
                 new_filename = new_filename.lower()
 
-            with tempfile.NamedTemporaryFile(dir=self.cfg.get_tempdir()) as tmpfile:
-                temp_filename = tmpfile.name
+            self.logger.info("%s  -->  %s", filename, new_filename)
 
-                shutil.copy(filename, temp_filename)
-                self.logger.info("%s  -->  %s", filename, temp_filename)
-
-                self.rotate_picture_according_exif(temp_filename)
-
-                shutil.copy(temp_filename, new_filename)
+            self.rotate_and_copy_picture_according_exif(filename, new_filename)
 
             if not self.args.debug:
                 os.remove(filename)
