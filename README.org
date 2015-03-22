@@ -51,15 +51,6 @@ directory where that program stores the pictures.
 
 This value has no default. It must be specified before use.
 
-*** General:TEMPDIR
-
-A temporary working directory that fetchphotos uses for internal
-processing. All the files that fetchphotos creates here will be
-deleted when the program finishes.
-
-If not specified here, fetchphotos will use a system-appropriate
-directory for its temporary files.
-
 *** General:DESTINATIONDIR
 
 The directory where the processed files will be copied to.

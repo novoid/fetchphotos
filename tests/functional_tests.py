@@ -30,7 +30,6 @@ import fetchphotos
 CF_TEMPLATE = string.Template(u'''
 [General]
 DIGICAMDIR=$src
-TEMPDIR=$tmp
 DESTINATIONDIR=$dst
 #IMAGE_EXTENSIONS= JPG, tiff
 VIDEO_EXTENSIONS=mov avi
@@ -41,7 +40,6 @@ LOWERCASE_FILENAME=$lower
 ''')
 
 CF_DEFAULTS = {'src': '/path-to-images',
-               'tmp': '/path-to-temp',
                'dst': '/path-to-dst',
                'rot': True,
                'timestamp': True,
@@ -76,7 +74,6 @@ class TestMethods(unittest.TestCase):
         self.cfgfile = os.path.join(self.tempdir, u"config.cfg")
         shutil.copytree(u"./tests/testdata/example_images",
                         os.path.join(self.tempdir, u"src"))
-        os.makedirs(os.path.join(self.tempdir, u"tmp"))
         os.makedirs(os.path.join(self.tempdir, u"dst"))
         print "temp dir is:", self.tempdir
 
@@ -115,7 +112,6 @@ def write_config_file(fname, tdir):
 
     cf_sub = copy.copy(CF_DEFAULTS)
     cf_sub['src'] = os.path.join(tdir, u'src')
-    cf_sub['tmp'] = os.path.join(tdir, u'tmp')
     cf_sub['dst'] = os.path.join(tdir, u'dst')
     with open(fname, "w") as out:
         out.write(CF_TEMPLATE.substitute(cf_sub))

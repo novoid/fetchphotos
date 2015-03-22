@@ -20,7 +20,6 @@ import logging
 import os
 import shutil
 import sys
-import tempfile
 import time
 
 try:
@@ -49,7 +48,6 @@ class FetchphotosConfig(object):
         self.config = self.set_config_parser()
 
         self.check_sourcedir()
-        self.check_tempdir()
         self.check_destdir()
 
     def get_config_filename(self):
@@ -93,11 +91,6 @@ DIGICAMDIR=/path-to-images -- replace me!
 
 # directory, where the photos will be moved to
 DESTINATIONDIR=/path-to-destination -- replace me!
-
-# directory where the digicam photos are temporary stored for being
-# processed If not specified, fetchphotos will use a
-# system-appropriate directory for its temporary files.
-TEMPDIR=
 
 [File_processing]
 
@@ -155,32 +148,6 @@ LOWERCASE_FILENAME=true
     def get_sourcedir(self):
         """Return the (valid) source directory."""
         return self._srcdir
-
-    def check_tempdir(self):
-        """Make sure the temp directory is valid if present."""
-        try:
-            tempdir = self.get(u'General', u'TEMPDIR')
-            if tempdir == "":
-                tempdir = tempfile.gettempdir()
-            elif tempdir.startswith(u'/path-to'):
-                raise ValueError(u"You must set TEMPDIR to the name of the directory" +
-                                 u" where the digicam photos are processed" +
-                                 u" (not /path-to-temporary-directory)")
-
-            if not os.path.exists(tempdir):
-                raise IOError(ctypes.get_errno(),
-                              u"The digicam temporary directory \"{}\" does not exist".format(
-                                  tempdir))
-        except ConfigParser.NoOptionError, ex:
-            ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
-                          ex.message)
-            raise
-
-        self._tempdir = tempdir
-
-    def get_tempdir(self):
-        """Return the (valid) temporary directory."""
-        return self._tempdir
 
     def check_destdir(self):
         """Make sure the destination directory is present."""

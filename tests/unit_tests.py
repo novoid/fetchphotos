@@ -106,36 +106,6 @@ class TestConfigCheckers(unittest.TestCase):
         self.fpc.config = self.fpc.set_config_parser()
         self.cfg = self.fpc.config
 
-    # Check temp dir
-
-    def test_check_bad_tempdir(self):
-        """TEMPDIR must exist"""
-        self.fpc.config.set(u'General', u'TEMPDIR', u'«hello»')
-        with self.assertRaises(IOError) as exc:
-            self.fpc.check_tempdir()
-
-        self.assertTrue(re.search(
-            r'The digicam temporary directory ".*" does not exist',
-            exc.exception.strerror))
-
-    def test_check_unset_tempdir(self):
-        """TEMPDIR must be set in the configuration file."""
-        self.fpc.config.set(u'General', u'TEMPDIR', u'/path-to/foo')
-        with self.assertRaises(ValueError):
-            self.fpc.check_tempdir()
-
-    def test_check_no_tempdir(self):
-        """There must be a TEMPDIR setting in the configuration file."""
-        self.fpc.config.remove_option(u'General', u'TEMPDIR')
-        with self.assertRaises(ConfigParser.NoOptionError):
-            self.fpc.check_tempdir()
-
-    def test_check_good_tempdir(self):
-        """Happy case"""
-        self.fpc.config.set(u'General', u'TEMPDIR', u'./')
-        self.fpc.check_tempdir()
-        self.assertEqual(1, 1) # No exceptions
-
     # Check source dir
 
     def test_check_bad_sourcedir(self):
