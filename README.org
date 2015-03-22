@@ -14,10 +14,10 @@ manage my photographs and more: http://karl-voit.at/managing-digital-photographs
 
 ** Usage
 
-fetchphotos gets image and video files from the [[Gen][source directory]]
-(specified in the configuration file), and moves the finished files to
-the [[*General:DESTINATIONDIR][destination directory]]. Along the way, it can add a [[*File_processing:ADD_TIMESTAMP][timestamp]] to
-the file name, [[*File_processing:ROTATE_PHOTOS][rotate]] the image, and make the filename [[*File_processing:LOWERCASE_FILENAME][lowercase]].
+fetchphotos gets image files from the [[Gen][source directory]] (specified in
+the configuration file), and moves the finished files to the
+[[*General:DESTINATIONDIR][destination directory]]. Along the way, it can add a [[*File_processing:ADD_TIMESTAMP][timestamp]] to the
+file name, [[*File_processing:ROTATE_PHOTOS][rotate]] the image, and make the filename [[*File_processing:LOWERCASE_FILENAME][lowercase]].
 
 *** Examples
 
@@ -29,10 +29,9 @@ file is). You will need to edit this file and provide value for the
 source and destination directories (look for "replace me!").
 
 : fetchphotos.py
-... will take all the image and video files in the source directory,
-rotate them as appropriate, add timestamps to the file names, convert
-the file names to lowercase, and put these files in the destination
-directory.
+... will take all the image files in the source directory, rotate them
+as appropriate, add timestamps to the file names, convert the file
+names to lowercase, and put these files in the destination directory.
 
 : fetchphotos.py /some/directory/*.jpg
 ... will transform the files as above, but will only use the files in
