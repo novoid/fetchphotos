@@ -14,6 +14,7 @@ from datetime import datetime
 import ConfigParser  ## for configuration files
 import codecs    # for handling Unicode content in config files
 import ctypes
+import fnmatch
 import logging
 import os
 import shutil
@@ -148,8 +149,14 @@ LOWERCASE_FILENAME=true
                           ex.message)
             raise
 
+        self._srcdir = digicamdir
+
+    def get_sourcedir(self):
+        """Return the (valid) source directory."""
+        return self._srcdir
+
     def check_tempdir(self):
-        """Make sure the temp directory is present."""
+        """Make sure the temp directory is valid if present."""
         try:
             tempdir = self.get(u'General', u'TEMPDIR')
             if tempdir == "":
@@ -167,6 +174,12 @@ LOWERCASE_FILENAME=true
             ex.message = (u"Can't find TEMPDIR setting in configuration file: " +
                           ex.message)
             raise
+
+        self._tempdir = tempdir
+
+    def get_tempdir(self):
+        """Return the (valid) temporary directory."""
+        return self._tempdir
 
     def check_destdir(self):
         """Make sure the destination directory is present."""
@@ -187,6 +200,12 @@ LOWERCASE_FILENAME=true
                           ex.message)
             #self.logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
             raise
+
+        self._destdir = destdir
+
+    def get_destdir(self):
+        """Return the (valid) destination directory."""
+        return self._destdir
 
 class Fetchphotos(object):
     """This class encapsulates the functionality of the fetchphotos application"""
@@ -248,6 +267,12 @@ class Fetchphotos(object):
         parser.add_argument("-s", "--dryrun", dest="dryrun", action="store_true",
                             help=("Enable dryrun mode: just simulate what would happen, " +
                                   "do not modify files or directories"))
+
+        parser.add_argument("--debug", dest="debug",
+                            action="store_true",
+                            help=("Enable developer debug mode -- " +
+                                  "you probably don't want to use " +
+                                  "this")
 
         parser.add_argument("--version", action="version",
                             version="%(prog)s " + self.PROG_VERSION_NUMBER)
@@ -339,7 +364,7 @@ class Fetchphotos(object):
         Report it if requested.
         """
         if hasattr(image, '_getexif'):
-            self.logger.debug(u"current image is an jpeg image")
+            self.logger.debug(u"current image is an jpeg image with EXIF data")
             exiftags = image._getexif()
             ## fetch orientation tag, default = 1 (no rotation)
             orientation = exiftags.get(0x0112, 1)
@@ -365,7 +390,7 @@ class Fetchphotos(object):
             return orientation
         else:
             self.logger.error(u"current file is not an JPEG file with EXIF data")
-
+            return 1            # Normal orientation
 
     def rotate_and_save_picture(self, filename, image, degrees):
         """Rotate image by <degrees> and replace the original image with the rotated one.
@@ -373,11 +398,10 @@ class Fetchphotos(object):
         self.logger.debug(u"Rotating image by %s degrees, saving to %s",
                           degrees, filename)
 
-        with tempfile.NamedTemporaryFile() as tmpfile:
+        with tempfile.NamedTemporaryFile(dir=self.cfg.get_tempdir()) as tmpfile:
             temp_filename = tmpfile.name
             new_image = image.rotate(degrees, expand=True)
             new_image.save(temp_filename)
-            os.remove(filename)
             shutil.copy(temp_filename, filename)
 
 
@@ -401,35 +425,53 @@ class Fetchphotos(object):
         else:
             self.logger.warn(u"Found unknown/unhandled orientation %s", orientation)
 
+    def get_filenames_to_process(self):
+        """Get a list of the files that should be copied.
+        If these names were passed in on the command line, use
+        those. Otherwise, look for files in DIGICAMDIR.
+        """
+        if self.args.filelist:
+            files = self.args.filelist
+        else:
+            # Note that fnmatch.filter is not case-sensitive
+            files = fnmatch.filter(
+                os.listdir(self.cfg.get_sourcedir()),
+                u'*.jpg')
+
+        # Make sure we return only files, not directories
+        return itertools.ifilter(os.path.isfile, files)
+
     def main(self):
         """Main function [make pylint happy :)]"""
 
         #print("Config is:")
         #config.write(sys.stdout)
 
-        self.logger.debug("filelist: [%s]", self.args.filelist)
+        self.logger.debug("filelist: [%s]", self.get_filenames_to_process())
 
         ## FIXXME: notify user of download time
 
-        tempdir = tempfile.gettempdir()
+        for filename in self.get_filenames_to_process():
+            filen = os.path.basename(filename)
+            self.logger.debug("----> is file: %s", filename)
 
-        for filename in self.args.filelist:
-            if os.path.isfile(filename):
-                filen = os.path.basename(filename)
-                self.logger.debug("----> is file: %s", filename)
+            new_filename = self.get_timestamp_string(filename) + "_" + filen
 
-                new_filename = self.get_timestamp_string(filename) + "_" + filen
+            if self.cfg.getboolean('File_processing', 'LOWERCASE_FILENAME'):
+                new_filename = new_filename.lower()
 
-                if self.cfg.getboolean('File_processing', 'LOWERCASE_FILENAME'):
-                    new_filename = new_filename.lower()
+            with tempfile.NamedTemporaryFile(dir=self.cfg.get_tempdir()) as tmpfile:
+                temp_filename = tmpfile.name
 
-                new_filename = os.path.join(tempdir, new_filename)
-                os.rename(filename, new_filename)
-                self.logger.info("%s  -->  %s", filename, new_filename)
+                shutil.copy(filename, temp_filename)
+                self.logger.info("%s  -->  %s", filename, temp_filename)
 
-                self.rotate_picture_according_exif(new_filename)
+                self.rotate_picture_according_exif(temp_filename)
 
+                shutil.copy(temp_filename, new_filename)
 
+            if not self.args.debug:
+                os.remove(filename)
 
 def main(argv):
     """Main routine for fetchphotos"""
