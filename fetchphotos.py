@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # Latest change: Fri Mar 27 00:27:30 CET 2009
 """This script gets photos and movies from digicams,\n\
@@ -37,11 +37,13 @@ class FetchphotosConfig(object):
         self.logger = logger
         self.requested_filename = filename
         self.gen_file = gen_file
-        self._cfgname = None
+        self._cfgname = self.get_config_filename()
         self.config = None
-        self.initialize()
+        self.config_file_ok = True
         if self.gen_file:
             self.generate_configfile()
+        else:
+            self.initialize()
 
     def initialize(self):
         self._cfgname = self.get_config_filename()
@@ -74,8 +76,17 @@ class FetchphotosConfig(object):
     def cfgname(self):
         return self._cfgname
 
+    def config_file_is_ok(self):
+        return self.config_file_ok
+
     def generate_configfile(self):
         """Create a skeleton configuration file, and its directory if needed."""
+        if os.path.isfile(self.cfgname()):
+            self.logger.error("The configuration file \"%s\" already.exists.", self.cfgname())
+            self.logger.error("Please move it out of the way before generating a new configuration file.")
+            self.config_file_ok = False
+            return
+
         self.logger.debug(u"Generating configuration file \"%s\"", self.cfgname())
         directory = os.path.dirname(self.cfgname())
 
@@ -110,7 +121,17 @@ ADD_TIMESTAMP=true
 # example: if true, file 'Foo.JPG' will end up in 'foo.jpg'
 LOWERCASE_FILENAME=true
 
+# keep originals in DIGICAMDIR
+# leave this set true until you have confidence that fetchphotos
+# does what you want.
+KEEP_ORIGINALS=true
+
 """)
+        self.logger.info("A configuration file has been created in %s",
+                         self.cfgname())
+        self.logger.info("Please update this file before fetching photos.")
+
+        self.config_file_ok = False
 
     def set_config_parser(self):
         """Convenient method for getting config object.
@@ -132,9 +153,10 @@ LOWERCASE_FILENAME=true
         try:
             digicamdir = self.get(u'General', u'DIGICAMDIR')
             if digicamdir.startswith(u'/path-to'):
-                raise ValueError(u"You must set DIGICAMDIR to the name of the directory" +
-                                 u" where the digicam photos are located (not /path-to-images)")
-            if not os.path.exists(digicamdir):
+                self.logger.info(u"In %s, you must set DIGICAMDIR to the name of the directory", self.cfgname())
+                self.logger.info(u" where the digicam photos are located (not /path-to-images)")
+                self.config_file_ok = False
+            elif not os.path.exists(digicamdir):
                 raise IOError(ctypes.get_errno(),
                               u"The digicam photo directory \"{}\" does not exist".format(
                                   digicamdir))
@@ -154,11 +176,11 @@ LOWERCASE_FILENAME=true
         try:
             destdir = self.get(u'General', u'DESTINATIONDIR')
             if destdir.startswith(u'/path-to'):
-                raise ValueError(u"You must set DESTINATIONDIR to the name of the directory" +
-                                 u" where the digicam photos will be moved to" +
+                self.logger.info(u"In %s, you must set DESTINATIONDIR to the name of the directory", self.cfgname())
+                self.logger.info(u" where the digicam photos will be moved to" +
                                  u" (not /path-to-destination)")
-
-            if not os.path.exists(destdir):
+                self.config_file_ok = False
+            elif not os.path.exists(destdir):
                 raise IOError(ctypes.get_errno(),
                               u"The digicam destination directory \"{}\" does not exist".format(
                                   destdir))
@@ -174,6 +196,135 @@ LOWERCASE_FILENAME=true
     def get_destdir(self):
         """Return the (valid) destination directory."""
         return self._destdir
+
+class FPFileInfo(object):
+    """This class provides filesystem and EXIF data about an image file."""
+
+    def __init__(self, filename, logger, config):
+        self.logger = logger
+        self.cfg = config
+        self.path = filename
+        self.name = os.path.basename(filename)
+        self.ctime = datetime.fromtimestamp(os.path.getctime(filename)).replace(microsecond=0)
+        self.rotation_type = ""
+
+    def initialize_exifdata(self):
+        """Gets the data we need from exif, with defaults"""
+        image = Image.open(self.path)
+        exiftags = image._getexif()
+        if exiftags is not None:
+            self.logger.debug(u"current image is an jpeg image with EXIF data")
+            self.orientation = self.get_jpeg_orientation(exiftags)
+            self.time = self.get_exif_creation_time(exiftags)
+        else:
+            self.orientation = 1
+            self.time = self.ctime
+
+        self.set_new_filename()
+
+    def get_exif_creation_time(self, exiftags):
+        """Extract the image creation time from the EXIF metadata, if possible."""
+
+        exif_time = exiftags.get(36868, 'no_time')
+        if exif_time == 'no_time':
+            exif_time = exiftags.get(36867, 'no_time')
+
+        creation_time = datetime.strptime(exif_time, "%Y:%m:%d %H:%M:%S")
+
+        return creation_time
+
+    ## http://sylvana.net/jpegcrop/exif_orientation.html
+    ## value  0th row    0th column
+    ## 1      top        left side  -> normal orientation
+    ## 2      top        right side
+    ## 3      bottom     right side
+    ## 4      bottom     left side
+    ## 5      left side  top
+    ## 6      right side top        -> left side of jpeg is top side
+    ## 7      right side bottom
+    ## 8      left side  bottom     -> right side of jepg is top side
+    def get_jpeg_orientation(self, exiftags):
+        """Extract the EXIF opinion of the orientation of the image.
+        Report it if requested.
+        """
+        ## fetch orientation tag, default = 1 (no rotation)
+        orientation = exiftags.get(0x0112, 1)
+        #self.logger.debug("orientation is: %s", orientation)
+        ## indication of a portrait mode - swap width and height
+        if orientation == 1:
+            self.logger.debug(
+                u'exif orientation tag %s says: %s',
+                orientation,
+                u'photo shot in normal (landscape) mode')
+        elif orientation == 6:
+            self.logger.debug(
+                u'EXIF orientation tag %s says: %s',
+                orientation,
+                u'photo shot in portrait mode with left side of JPEG is top')
+        elif orientation == 8:
+            self.logger.debug(
+                u'EXIF orientation tag %s says: %s',
+                orientation,
+                u'photo shot in portrait mode with right side of JPEG is top')
+        else:
+            self.logger.warning(
+                u'EXIF orientation %d not recognised! Returning normal orientation',
+                orientation)
+            orientation = 1
+
+        return orientation
+
+    def get_orientation(self):
+        return self.orientation
+
+    def get_timestamp(self):
+        return time.strftime(self.FORMATSTRING, self.time)
+
+    def set_new_filename(self):
+        """Calculates the path for the destination file."""
+        if self.cfg.getboolean('File_processing', 'LOWERCASE_FILENAME'):
+            filen = self.name.lower()
+        else:
+            filen = self.name
+
+        new_filename = self.time.isoformat().replace(':', '.') + "_" + filen
+
+        new_path = os.path.join(
+            self.cfg.get_destdir(),
+            new_filename)
+
+        self.new_path = new_path
+
+    def get_new_filename(self):
+        """Returns path of new image file"""
+        return self.new_path
+
+    def rotate_and_copy_picture(self):
+        """Rotate image in <filename> according to its EXIF data
+        """
+        self.logger.debug(u"rotate_picture_according_exif called with file %s", self.path)
+
+        self.rotation_type = ""
+
+        if self.orientation == 1:
+            shutil.copy(self.path, self.get_new_filename())
+        elif self.orientation == 6:
+            self.rotation_type == u" rotated 90° ccw"
+            self.rotate_and_save_picture(self.get_new_filename(), image, -90)
+        elif self.orientation == 8:
+            self.rotation_type == u" rotated 90° cw"
+            self.rotate_and_save_picture(self.get_new_filename(), image, 90)
+        else:
+            self.logger.warn(u"Found unknown/unhandled orientation %s -- orientation not changed", self.orientation)
+            shutil.copy(self.path, self.get_new_filename())
+
+    def remove_source_file(self):
+        """Removes the souce image file."""
+        os.remove(self.path)
+        self.path = None
+
+    def get_rotation_type(self):
+        return self.rotation_type
 
 class Fetchphotos(object):
     """This class encapsulates the functionality of the fetchphotos application"""
@@ -201,7 +352,9 @@ class Fetchphotos(object):
 
         self.logger = self.initialize_logging()
 
-        self.cfg = FetchphotosConfig(self.logger, self.args.configfile)
+        self.cfg = FetchphotosConfig(self.logger,
+                                     self.args.configfile,
+                                     self.args.generate_configfile)
 
     def parse_args(self, argv):
         """Handle the command line parsing."""
@@ -310,56 +463,6 @@ class Fetchphotos(object):
     \n\
     Run %prog --help for usage hints"
 
-    def get_timestamp_string(self, filename):
-        """read out ctime or mtime of file and return timestamp"""
-
-        return time.strftime(self.FORMATSTRING, time.localtime(os.path.getctime(filename)))
-
-
-
-    ## http://sylvana.net/jpegcrop/exif_orientation.html
-    ## value  0th row    0th column
-    ## 1      top        left side  -> normal orientation
-    ## 2      top        right side
-    ## 3      bottom     right side
-    ## 4      bottom     left side
-    ## 5      left side  top
-    ## 6      right side top        -> left side of jpeg is top side
-    ## 7      right side bottom
-    ## 8      left side  bottom     -> right side of jepg is top side
-    def get_jpeg_orientation(self, image):
-        """Extract the EXIF opinion of the orientation of the image.
-        Report it if requested.
-        """
-        if hasattr(image, '_getexif'):
-            self.logger.debug(u"current image is an jpeg image with EXIF data")
-            exiftags = image._getexif()
-            ## fetch orientation tag, default = 1 (no rotation)
-            orientation = exiftags.get(0x0112, 1)
-            #self.logger.debug("orientation is: %s", orientation)
-            ## indication of a portrait mode - swap width and height
-            if orientation == 1:
-                self.logger.debug(
-                    u'exif orientation tag %s says: %s',
-                    orientation,
-                    u'photo shot in normal (landscape) mode')
-            elif orientation == 6:
-                self.logger.debug(
-                    u'EXIF orientation tag %s says: %s',
-                    orientation,
-                    u'photo shot in portrait mode with left side of JPEG is top')
-            elif orientation == 8:
-                self.logger.debug(
-                    u'EXIF orientation tag %s says: %s',
-                    orientation,
-                    u'photo shot in portrait mode with right side of JPEG is top')
-            else:
-                self.logger.error(u'EXIF orientation not recognised!')
-            return orientation
-        else:
-            self.logger.error(u"current file is not an JPEG file with EXIF data")
-            return 1            # Normal orientation
-
     def rotate_and_save_picture(self, filename, image, degrees):
         """Rotate image by <degrees> and replace the original image with the rotated one.
         """
@@ -369,40 +472,25 @@ class Fetchphotos(object):
         new_image = image.rotate(degrees, expand=True)
         new_image.save(filename)
 
-    def rotate_and_copy_picture_according_exif(self, source_filename, dest_filename):
-        """Rotate image in <filename> according to its EXIF data
-        """
-        self.logger.debug(u"rotate_picture_according_exif called with file %s", source_filename)
-
-        image = Image.open(source_filename)
-
-        orientation = self.get_jpeg_orientation(image)
-
-        if orientation == 1:
-            self.logger.debug(u"no rotation required")
-            shutil.copy(source_filename, dest_filename)
-        elif orientation == 6:
-            self.logger.debug(u"will rotate 90 degrees counter clockwise")
-            self.rotate_and_save_picture(dest_filename, image, -90)
-        elif orientation == 8:
-            self.logger.debug(u"will rotate 90 degrees clockwise")
-            self.rotate_and_save_picture(dest_filename, image, 90)
-        else:
-            self.logger.warn(u"Found unknown/unhandled orientation %s -- orientation not changed", orientation)
-            shutil.copy(source_filename, dest_filename)
-
     def get_filenames_to_process(self):
         """Get a list of the files that should be copied.
         If these names were passed in on the command line, use
         those. Otherwise, look for files in DIGICAMDIR.
         """
         if self.args.filelist:
+            self.logger.debug("Setting files to %s", self.args.filelist)
             files = self.args.filelist
         else:
             # Note that fnmatch.filter is not case-sensitive
-            files = fnmatch.filter(
-                os.listdir(self.cfg.get_sourcedir()),
-                u'*.jpg')
+            files = [os.path.join(self.cfg.get_sourcedir(),
+                                  fname) for fname in 
+                     sorted(fnmatch.filter(
+                         os.listdir(self.cfg.get_sourcedir()),
+                         u'*.jpg'))]
+
+            self.logger.debug("Checking files in %s, got %s",
+                              self.cfg.get_sourcedir(),
+                              files)
 
         # Make sure we return only files, not directories
         return itertools.ifilter(os.path.isfile, files)
@@ -410,28 +498,32 @@ class Fetchphotos(object):
     def main(self):
         """Main function [make pylint happy :)]"""
 
+        if not self.cfg.config_file_is_ok():
+            return
+
         #print("Config is:")
         #config.write(sys.stdout)
 
-        self.logger.debug("filelist: [%s]", self.get_filenames_to_process())
+        self.logger.debug("filelist: [%s]", [f for f in self.get_filenames_to_process()])
 
         ## FIXXME: notify user of download time
 
         for filename in self.get_filenames_to_process():
-            filen = os.path.basename(filename)
             self.logger.debug("----> is file: %s", filename)
 
-            new_filename = self.get_timestamp_string(filename) + "_" + filen
+            fpfile = FPFileInfo(filename, self.logger, self.cfg)
+            fpfile.initialize_exifdata()
 
-            if self.cfg.getboolean('File_processing', 'LOWERCASE_FILENAME'):
-                new_filename = new_filename.lower()
+            fpfile.rotate_and_copy_picture()
 
-            self.logger.info("%s  -->  %s", filename, new_filename)
+            self.logger.info("%s  -->  %s%s",
+                             filename,
+                             fpfile.get_new_filename(),
+                             fpfile.get_rotation_type()
+            )
 
-            self.rotate_and_copy_picture_according_exif(filename, new_filename)
-
-            if not self.args.debug:
-                os.remove(filename)
+            if not self.cfg.getboolean('File_processing', 'KEEP_ORIGINALS'):
+                fpfile.remove_source_file()
 
 def main(argv):
     """Main routine for fetchphotos"""

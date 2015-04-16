@@ -121,8 +121,8 @@ class TestConfigCheckers(unittest.TestCase):
     def test_check_unset_sourcedir(self):
         """DIGICAMDIR must be set in the configuration file."""
         self.cfg.set(u'General', u'DIGICAMDIR', u'/path-to/foo')
-        with self.assertRaises(ValueError):
-            self.fpc.check_sourcedir()
+        self.fpc.check_sourcedir()
+        self.assertFalse(self.fpc.config_file_is_ok())
 
     def test_check_no_sourcedir(self):
         """There must be a DIGICAMDIR setting in the configuration file."""
@@ -151,8 +151,8 @@ class TestConfigCheckers(unittest.TestCase):
     def test_check_unset_destdir(self):
         """DESTINATIONDIR must be set in the configuration file."""
         self.cfg.set(u'General', u'DESTINATIONDIR', u'/path-to/foo')
-        with self.assertRaises(ValueError):
-            self.fpc.check_destdir()
+        self.fpc.check_destdir()
+        self.assertFalse(self.fpc.config_file_is_ok())
 
     def test_check_no_destdir(self):
         """There must be a DESTINATIONDIR setting in the configuration file."""
