@@ -1,0 +1,24 @@
+* Contents
+
+This directory contains the source image and video files for the
+functional tests. Be careful not to change the names or exif data in
+these files.
+
+* Files
+
+** IMG_0533_normal_top_left.JPG
+
+This file has an orientation value of 1, indicating that it should not
+be rotated. Has a creation date of 2009:04:22 17:25:35.
+
+** IMG_0534_right_top_-_left_ is_top.JPG
+
+This file has an orientation value of 6, indicating that it should be
+rotated 90° clockwise. It has a creation date of 2009:04:22
+17:25:38.
+
+** IMG_0535_left_bottom_-_right_is_top.JPG
+
+This file has an orientation value of 8, indicating that it should be
+rotated 90° counterclockwise. It has a creation date of 2009:04:22
+17:25:44.
