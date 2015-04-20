@@ -16,7 +16,6 @@ import fetchphotos
 import logging
 import os
 import re
-import types
 import unittest
 
 # # Adapted from: http://stackoverflow.com/a/22434262
@@ -35,6 +34,7 @@ import unittest
 #             sys.stderr = old_stderr
 
 def null_routine(self):
+    # pylint: disable=unused-argument
     pass
 
 def short_initialize(self):
@@ -44,20 +44,20 @@ class TestConfigMethods(unittest.TestCase):
     """Unit tests for low-level methods in fetchphotos.py"""
     def setUp(self):
         """fetchphotos needs logging to be initialized"""
-        logging.basicConfig(level = logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(u"Tester")
         self.logger.setLevel(logging.CRITICAL)
 
     def test_check_getconfig(self):
-        logging.basicConfig(level = logging.DEBUG)
         """Complain if the configuration file doesn't exist."""
+        logging.basicConfig(level=logging.DEBUG)
 
         with self.assertRaisesRegexp(IOError, u'No such file or directory:'):
-            fpc = fetchphotos.FetchphotosConfig(self.logger, u"hoo")
+            fetchphotos.FetchphotosConfig(self.logger, u"hoo")
 
         # Make sure it works with non-ascii
         with self.assertRaisesRegexp(IOError, u'No such file or directory:'):
-            fpc = fetchphotos.FetchphotosConfig(self.logger, u"«boo»")
+            fetchphotos.FetchphotosConfig(self.logger, u"«boo»")
 
     def tearDown(self):
         pass
@@ -66,7 +66,7 @@ class TestConfigMethodsWithoutInit(unittest.TestCase):
     """Unit tests for low-level methods in fetchphotos.py"""
     def setUp(self):
         """fetchphotos needs logging to be initialized"""
-        logging.basicConfig(level = logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(u"Tester")
 
         self.logger.setLevel(logging.CRITICAL)
@@ -78,15 +78,15 @@ class TestConfigMethodsWithoutInit(unittest.TestCase):
     def test_gen_config(self):
         """Make sure generate_configfile works"""
 
-        fpc = fetchphotos.FetchphotosConfig(self.logger, u"«boo»", gen_file=True)
+        fetchphotos.FetchphotosConfig(self.logger, u"«boo»", gen_file=True)
         self.assertTrue(os.path.isfile(u"«boo»"))
         self.gone_files.append(u"«boo»")
 
     def tearDown(self):
         fetchphotos.FetchphotosConfig.initialize = self.old_init
-        for file in self.gone_files:
-            if os.path.isfile(file):
-                os.unlink(file)
+        for filename in self.gone_files:
+            if os.path.isfile(filename):
+                os.unlink(filename)
 
 class TestConfigCheckers(unittest.TestCase):
     """Test the behavior of the configuration file parser"""
@@ -94,7 +94,7 @@ class TestConfigCheckers(unittest.TestCase):
         """fetchphotos needs logging to be initialized.
         These tests also need a config object.
         """
-        logging.basicConfig(level = logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger(u"Tester")
 
         self.logger.setLevel(logging.CRITICAL)
@@ -121,7 +121,7 @@ class TestConfigCheckers(unittest.TestCase):
     def test_check_unset_sourcedir(self):
         """DIGICAMDIR must be set in the configuration file."""
         self.cfg.set(u'General', u'DIGICAMDIR', u'/path-to/foo')
-        self.fpc.check_sourcedir()
+        self.fpc._srcdir = self.fpc.check_sourcedir()
         self.assertFalse(self.fpc.config_file_is_ok())
 
     def test_check_no_sourcedir(self):
@@ -151,7 +151,7 @@ class TestConfigCheckers(unittest.TestCase):
     def test_check_unset_destdir(self):
         """DESTINATIONDIR must be set in the configuration file."""
         self.cfg.set(u'General', u'DESTINATIONDIR', u'/path-to/foo')
-        self.fpc.check_destdir()
+        self.fpc._destdir = self.fpc.check_destdir()
         self.assertFalse(self.fpc.config_file_is_ok())
 
     def test_check_no_destdir(self):

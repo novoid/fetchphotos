@@ -14,10 +14,10 @@ from datetime import datetime
 import ConfigParser  ## for configuration files
 import codecs    # for handling Unicode content in config files
 import ctypes
-import fnmatch
 import itertools
 import logging
 import os
+import re
 import shutil
 import sys
 import time
@@ -33,31 +33,33 @@ except ImportError:
 class FetchphotosConfig(object):
     """Handles configuration parsing for Fetchphotos"""
 
-    def __init__(self, logger, filename, gen_file=False):
+    def __init__(self, logger, requested_filename, gen_file=False):
         self.logger = logger
-        self.requested_filename = filename
-        self.gen_file = gen_file
-        self._cfgname = self.get_config_filename()
+        self._cfgname = self.set_config_filename(requested_filename)
         self.config = None
-        self.config_file_ok = True
-        if self.gen_file:
+        if gen_file:
             self.generate_configfile()
         else:
             self.initialize()
 
     def initialize(self):
-        self._cfgname = self.get_config_filename()
+        """This method initializes the configuration object in the
+        case that there is a configuration file.
+        """
         self.config = self.set_config_parser()
 
-        self.check_sourcedir()
-        self.check_destdir()
+        self._srcdir = self.check_sourcedir()
+        self._destdir = self.check_destdir()
 
     def get_config_filename(self):
-        """Return the name of the configuration file.
-        Unless given on the command line, this will
-        vary by the operating system used.        """
-        if self.requested_filename:
-            cfgname = self.requested_filename
+        return self._cfgname
+
+    def set_config_filename(self, requested_filename):
+        """Return the name of the configuration file.  Unless given on the
+        command line, this will vary by the operating system used.
+        """
+        if requested_filename:
+            cfgname = requested_filename
         else:
             cfgname = os.path.join(
                 appdirs.user_config_dir('fetchphotos', False),
@@ -77,14 +79,14 @@ class FetchphotosConfig(object):
         return self._cfgname
 
     def config_file_is_ok(self):
-        return self.config_file_ok
+        return self.config is not None
 
     def generate_configfile(self):
         """Create a skeleton configuration file, and its directory if needed."""
         if os.path.isfile(self.cfgname()):
             self.logger.error("The configuration file \"%s\" already.exists.", self.cfgname())
-            self.logger.error("Please move it out of the way before generating a new configuration file.")
-            self.config_file_ok = False
+            self.logger.error("Please move it out of the way before " +
+                              "generating a new configuration file.")
             return
 
         self.logger.debug(u"Generating configuration file \"%s\"", self.cfgname())
@@ -131,8 +133,6 @@ KEEP_ORIGINALS=true
                          self.cfgname())
         self.logger.info("Please update this file before fetching photos.")
 
-        self.config_file_ok = False
-
     def set_config_parser(self):
         """Convenient method for getting config object.
         It sets the encoding, and complains about problems.
@@ -153,9 +153,10 @@ KEEP_ORIGINALS=true
         try:
             digicamdir = self.get(u'General', u'DIGICAMDIR')
             if digicamdir.startswith(u'/path-to'):
-                self.logger.info(u"In %s, you must set DIGICAMDIR to the name of the directory", self.cfgname())
+                self.logger.info(u"In %s, you must set DIGICAMDIR to the name of the directory",
+                                 self.cfgname())
                 self.logger.info(u" where the digicam photos are located (not /path-to-images)")
-                self.config_file_ok = False
+                self.config = None
             elif not os.path.exists(digicamdir):
                 raise IOError(ctypes.get_errno(),
                               u"The digicam photo directory \"{}\" does not exist".format(
@@ -165,7 +166,7 @@ KEEP_ORIGINALS=true
                           ex.message)
             raise
 
-        self._srcdir = digicamdir
+        return digicamdir
 
     def get_sourcedir(self):
         """Return the (valid) source directory."""
@@ -176,10 +177,11 @@ KEEP_ORIGINALS=true
         try:
             destdir = self.get(u'General', u'DESTINATIONDIR')
             if destdir.startswith(u'/path-to'):
-                self.logger.info(u"In %s, you must set DESTINATIONDIR to the name of the directory", self.cfgname())
+                self.logger.info(u"In %s, you must set DESTINATIONDIR to the name of the directory",
+                                 self.cfgname())
                 self.logger.info(u" where the digicam photos will be moved to" +
                                  u" (not /path-to-destination)")
-                self.config_file_ok = False
+                self.config = None
             elif not os.path.exists(destdir):
                 raise IOError(ctypes.get_errno(),
                               u"The digicam destination directory \"{}\" does not exist".format(
@@ -191,7 +193,7 @@ KEEP_ORIGINALS=true
             #self.logger.error(u"Can't find DESTINATIONDIR setting in configuration file: %s"%e)
             raise
 
-        self._destdir = destdir
+        return destdir
 
     def get_destdir(self):
         """Return the (valid) destination directory."""
@@ -200,6 +202,8 @@ KEEP_ORIGINALS=true
 class FPFileInfo(object):
     """This class provides filesystem and EXIF data about an image file."""
 
+    FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
+
     def __init__(self, filename, logger, config):
         self.logger = logger
         self.cfg = config
@@ -207,11 +211,15 @@ class FPFileInfo(object):
         self.name = os.path.basename(filename)
         self.ctime = datetime.fromtimestamp(os.path.getctime(filename)).replace(microsecond=0)
         self.rotation_type = ""
+        self.orientation = 1
+        self.new_path = ''
+        self.image = None
+        self.time = self.ctime
 
     def initialize_exifdata(self):
         """Gets the data we need from exif, with defaults"""
-        image = Image.open(self.path)
-        exiftags = image._getexif()
+        self.image = Image.open(self.path)
+        exiftags = self.image._getexif()
         if exiftags is not None:
             self.logger.debug(u"current image is an jpeg image with EXIF data")
             self.orientation = self.get_jpeg_orientation(exiftags)
@@ -230,6 +238,9 @@ class FPFileInfo(object):
             exif_time = exiftags.get(36867, 'no_time')
 
         creation_time = datetime.strptime(exif_time, "%Y:%m:%d %H:%M:%S")
+        self.logger.debug(u"exif_time is %s, creation_time is %s",
+                          exif_time,
+                          creation_time)
 
         return creation_time
 
@@ -289,15 +300,22 @@ class FPFileInfo(object):
 
         new_filename = self.time.isoformat().replace(':', '.') + "_" + filen
 
-        new_path = os.path.join(
+        self.new_path = os.path.join(
             self.cfg.get_destdir(),
             new_filename)
-
-        self.new_path = new_path
 
     def get_new_filename(self):
         """Returns path of new image file"""
         return self.new_path
+
+    def rotate_and_save_picture(self, filename, degrees):
+        """Rotate image by <degrees> and replace the original image with the rotated one.
+        """
+        self.logger.debug(u"Rotating image by %s degrees, saving to %s",
+                          degrees, filename)
+
+        new_image = self.image.rotate(degrees, expand=True)
+        new_image.save(filename)
 
     def rotate_and_copy_picture(self):
         """Rotate image in <filename> according to its EXIF data
@@ -309,13 +327,14 @@ class FPFileInfo(object):
         if self.orientation == 1:
             shutil.copy(self.path, self.get_new_filename())
         elif self.orientation == 6:
-            self.rotation_type == u" rotated 90° ccw"
-            self.rotate_and_save_picture(self.get_new_filename(), image, -90)
+            self.rotation_type = u" (rotated 90° ccw)"
+            self.rotate_and_save_picture(self.get_new_filename(), -90)
         elif self.orientation == 8:
-            self.rotation_type == u" rotated 90° cw"
-            self.rotate_and_save_picture(self.get_new_filename(), image, 90)
+            self.rotation_type = u" (rotated 90° cw)"
+            self.rotate_and_save_picture(self.get_new_filename(), 90)
         else:
-            self.logger.warn(u"Found unknown/unhandled orientation %s -- orientation not changed", self.orientation)
+            self.logger.warn(u"Found unknown/unhandled orientation %s -- " +
+                             u"orientation not changed", self.orientation)
             shutil.copy(self.path, self.get_new_filename())
 
     def remove_source_file(self):
@@ -335,7 +354,6 @@ class Fetchphotos(object):
     PROG_VERSION_DATE = u"2015-02-27"
     INVOCATION_TIME = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    FORMATSTRING = u"%Y-%m-%dT%H.%M.%S"
     LOGGER_NAME = u"fetchphotos"
     EPILOG = u"\n\
     :copyright:  (c) 2015 and following by Karl Voit <tools@Karl-Voit.at>\n\
@@ -347,7 +365,6 @@ class Fetchphotos(object):
 
     def __init__(self, argv):
         self.argv = argv
-
         self.parse_args(argv)
 
         self.logger = self.initialize_logging()
@@ -463,15 +480,6 @@ class Fetchphotos(object):
     \n\
     Run %prog --help for usage hints"
 
-    def rotate_and_save_picture(self, filename, image, degrees):
-        """Rotate image by <degrees> and replace the original image with the rotated one.
-        """
-        self.logger.debug(u"Rotating image by %s degrees, saving to %s",
-                          degrees, filename)
-
-        new_image = image.rotate(degrees, expand=True)
-        new_image.save(filename)
-
     def get_filenames_to_process(self):
         """Get a list of the files that should be copied.
         If these names were passed in on the command line, use
@@ -483,10 +491,10 @@ class Fetchphotos(object):
         else:
             # Note that fnmatch.filter is not case-sensitive
             files = [os.path.join(self.cfg.get_sourcedir(),
-                                  fname) for fname in 
-                     sorted(fnmatch.filter(
-                         os.listdir(self.cfg.get_sourcedir()),
-                         u'*.jpg'))]
+                                  fname) for fname in
+                     sorted([n for n in os.listdir(self.cfg.get_sourcedir()) if
+
+                             re.search(r'\.jpg$', n, flags=re.I)])]
 
             self.logger.debug("Checking files in %s, got %s",
                               self.cfg.get_sourcedir(),
@@ -514,16 +522,21 @@ class Fetchphotos(object):
             fpfile = FPFileInfo(filename, self.logger, self.cfg)
             fpfile.initialize_exifdata()
 
-            fpfile.rotate_and_copy_picture()
+            if self.args.dryrun:
+                self.logger.info(u"dryrun: not processing picture")
+            else:
+                fpfile.rotate_and_copy_picture()
 
             self.logger.info("%s  -->  %s%s",
                              filename,
                              fpfile.get_new_filename(),
-                             fpfile.get_rotation_type()
-            )
+                             fpfile.get_rotation_type())
 
             if not self.cfg.getboolean('File_processing', 'KEEP_ORIGINALS'):
-                fpfile.remove_source_file()
+                if self.args.dryrun:
+                    self.logger.info(u"dryrun: not removing source files")
+                else:
+                    fpfile.remove_source_file()
 
 def main(argv):
     """Main routine for fetchphotos"""

@@ -15,12 +15,9 @@ This file contains the functional or acceptance tests for the fetchphotos projec
 
 import argparse
 from contextlib import contextmanager
-from contextlib import closing
-import StringIO
 import copy
 import datetime
 import os
-import pprint
 import re
 import shutil
 import string
@@ -28,8 +25,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-
-import fetchphotos
 
 CF_TEMPLATE = string.Template(u'''
 [General]
@@ -92,81 +87,58 @@ class TestMethods(unittest.TestCase):
     def test_check_tempdir(self):
         """Basic happy case with one specified file."""
         write_config_file(self.cfgfile, self.tempdir)
-        result = subprocess.check_output(["python", 
-                                          "fetchphotos.py",
-                                          "-c",
-                                          self.cfgfile,
-                                          os.path.join(self.tempdir,
-                                                       u"src",
-                                                       u"IMG_0533_normal_top_left.JPG")
-                                      ],
-                                         stderr=subprocess.STDOUT)
+        subprocess.check_output(["python",
+                                 "fetchphotos.py",
+                                 "-c",
+                                 self.cfgfile,
+                                 os.path.join(self.tempdir,
+                                              u"src",
+                                              u"IMG_0533_normal_top_left.JPG")
+                                ],
+                                stderr=subprocess.STDOUT)
 
-        # print "Result is \"{}\"".format(result)
-        # with closing(StringIO.StringIO()) as f, \
-        #     redirect_stdout_stderr(f, capture_stderr=True):
-
-        #     fetchp = fetchphotos.Fetchphotos(
-        #         ["fetchphotos", '-v', '-c', self.cfgfile,
-        #          os.path.join(self.tempdir,
-        #                       u"src",
-        #                       u"IMG_0533_normal_top_left.JPG")])
-        #     fetchp.main()
-        #     blarp = f.getvalue()
-
-        # fetchp = fetchphotos.Fetchphotos(
-        #     ["fetchphotos", '-v', '-c', self.cfgfile,
-        #      os.path.join(self.tempdir,
-        #                   u"src",
-        #                   u"IMG_0533_normal_top_left.JPG")])
-        # fetchp.main()
-
-        #print "output is:", blarp
         dstfile = os.path.join(
             self.dstdir,
             u"2009-04-22T17.25.35_img_0533_normal_top_left.jpg")
-        
+
         # print "dstfile is", dstfile
         self.assertTrue(os.path.isfile(dstfile))
 
     def test_check_nolower(self):
         """Basic case with LOWERCASE_FILENAME=False."""
         write_config_file(self.cfgfile, self.tempdir, ('lower', False))
-        # result = subprocess.check_output(["python", "fetchphotos.py", "-c", self.cfgfile],
-        #                                  stderr=subprocess.STDOUT)
-        result = subprocess.check_output(["python", 
-                                          "fetchphotos.py",
-                                          "-c",
-                                          self.cfgfile,
-                                          os.path.join(self.tempdir,
-                                                       u"src",
-                                                       u"IMG_0533_normal_top_left.JPG")
-                                      ],
-                                         stderr=subprocess.STDOUT)
+
+        subprocess.check_output(["python",
+                                 "fetchphotos.py",
+                                 "-c",
+                                 self.cfgfile,
+                                 os.path.join(self.tempdir,
+                                              u"src",
+                                              u"IMG_0533_normal_top_left.JPG")
+                                ],
+                                stderr=subprocess.STDOUT)
 
         # print "Result is \"{}\"".format(result)
 
         dstfile = os.path.join(
             self.dstdir,
             u"2009-04-22T17.25.35_IMG_0533_normal_top_left.JPG")
-        
-        # print "dstfile is", dstfile
+
         self.assertTrue(os.path.isfile(dstfile))
 
     def test_check_no_metadata(self):
         """Basic case with a file without metadata"""
         write_config_file(self.cfgfile, self.tempdir, ('lower', False))
-        # result = subprocess.check_output(["python", "fetchphotos.py", "-c", self.cfgfile],
-        #                                  stderr=subprocess.STDOUT)
+
         try:
-            result = subprocess.check_output(["python", 
+            result = subprocess.check_output(["python",
                                               "fetchphotos.py",
                                               "-c",
                                               self.cfgfile,
                                               os.path.join(self.tempdir,
                                                            u"src",
                                                            u"img_no_metadata.JPG")
-                                          ],
+                                             ],
                                              stderr=subprocess.STDOUT)
             #print "Result is \"{}\"".format(result)
 
@@ -174,8 +146,8 @@ class TestMethods(unittest.TestCase):
             print "Got exception: \"{}\"".format(e.output)
 
         match = re.match(r'^.*\-\-\>\s+(.*)$', result, re.MULTILINE)
+        self.assertIsNotNone(match)
         if match is None:
-            self.assertTrue(False)
             return
 
         destfile = match.group(1)
@@ -207,20 +179,19 @@ class TestMethods(unittest.TestCase):
         """Check what happens the first time fetchphotos is called"""
 
         try:
-            result = subprocess.check_output(["python", 
-                                              "fetchphotos.py",
-                                              "-c",
-                                              self.cfgfile,
-                                              "--generate-configfile"
-                                          ],
-                                             stderr=subprocess.STDOUT)
-            print "Result is \"{}\"".format(result)
+            subprocess.check_output(["python",
+                                     "fetchphotos.py",
+                                     "-c",
+                                     self.cfgfile,
+                                     "--generate-configfile"
+                                    ],
+                                    stderr=subprocess.STDOUT)
+            # print "Result is \"{}\"".format(result)
 
         except subprocess.CalledProcessError, e:
             print "Got exception: \"{}\"".format(e.output)
 
         self.assertTrue(os.path.isfile(self.cfgfile))
-
 
 def write_config_file(fname, tdir, *pairs):
     """Writes a config file for testing.

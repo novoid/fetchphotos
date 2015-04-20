@@ -80,3 +80,10 @@ Rename files to lowercase. Can be one of 'true' or 'false'. Example:
 if true, file 'Foo.JPG' will end up in 'foo.jpg'.
 
 This value has a default of 'true'.
+
+*** File_processing:KEEP_ORIGINALS
+
+Don't delete the files in DIGICAMDIR. If you have confidence that fetchphotos
+does what you want, you can set this to false.
+
+KEEP_ORIGINALS=true
