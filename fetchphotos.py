@@ -543,11 +543,5 @@ def main(argv):
     fetchp = Fetchphotos(argv)
     fetchp.main()
 
-if __name__ == "__main__":
-    try:
-        main(sys.argv)
-    except KeyboardInterrupt:
-        logging.info("Received KeyboardInterrupt")
-
 ## END OF FILE #################################################################
 # vim:foldmethod=indent expandtab ai ft=python tw=120 fileencoding=utf-8 shiftwidth=4
