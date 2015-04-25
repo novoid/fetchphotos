@@ -30,6 +30,7 @@ except ImportError:
         "or \"apt-get install python-appdirs\"."
     sys.exit(1)
 
+#-------------------------------------------------------------------------
 class FetchphotosConfig(object):
     """Handles configuration parsing for Fetchphotos"""
 
@@ -37,6 +38,7 @@ class FetchphotosConfig(object):
         self.logger = logger
         self._cfgname = self.set_config_filename(requested_filename)
         self.config = None
+        print "gen_file is", gen_file
         if gen_file:
             self.generate_configfile()
         else:
@@ -96,39 +98,40 @@ class FetchphotosConfig(object):
             os.makedirs(directory)
 
         with open(self.cfgname(), "w") as out:
-            out.write(u"""
-[General]
+            out.write(re.sub(r'^ +', '', u"""
+            [General]
 
-# directory, where the digicam photos are located
-DIGICAMDIR=/path-to-images -- replace me!
+            # directory, where the digicam photos are located
+            DIGICAMDIR=/path-to-images -- replace me!
 
-# directory, where the photos will be moved to
-DESTINATIONDIR=/path-to-destination -- replace me!
+            # directory, where the photos will be moved to
+            DESTINATIONDIR=/path-to-destination -- replace me!
 
-[File_processing]
+            [File_processing]
 
-# rotate the photos according to EXIF data saved from the digicam
-# can be one of 'true' or 'false'
-ROTATE_PHOTOS=true
+            # rotate the photos according to EXIF data saved from the digicam
+            # can be one of 'true' or 'false'
+            ROTATE_PHOTOS=true
 
-# add timestamp according to ISO 8601+ http://datestamp.org/index.shtml
-# can be one of 'true' or 'false'
-# example: if true, file 'foo.jpg' will end up in '2009-12-31T23.59.59_foo.jpg'
-# Note that the time used comes from the EXIF metadata in the image, if available,
-# and from the creation date of the image file otherwise.
-ADD_TIMESTAMP=true
+            # add timestamp according to ISO 8601+ http://datestamp.org/index.shtml
+            # can be one of 'true' or 'false'
+            # example: if true, file 'foo.jpg' will end up in '2009-12-31T23.59.59_foo.jpg'
+            # Note that the time used comes from the EXIF metadata in the image, if available,
+            # and from the creation date of the image file otherwise.
+            ADD_TIMESTAMP=true
 
-# rename files to lowercase one
-# can be one of 'true' or 'false'
-# example: if true, file 'Foo.JPG' will end up in 'foo.jpg'
-LOWERCASE_FILENAME=true
+            # rename files to lowercase one
+            # can be one of 'true' or 'false'
+            # example: if true, file 'Foo.JPG' will end up in 'foo.jpg'
+            LOWERCASE_FILENAME=true
 
-# keep originals in DIGICAMDIR
-# leave this set true until you have confidence that fetchphotos
-# does what you want.
-KEEP_ORIGINALS=true
+            # keep originals in DIGICAMDIR
+            # leave this set true until you have confidence that fetchphotos
+            # does what you want.
+            KEEP_ORIGINALS=true
 
-""")
+            """, flags=re.MULTILINE))
+
         self.logger.info("A configuration file has been created in %s",
                          self.cfgname())
         self.logger.info("Please update this file before fetching photos.")
@@ -199,6 +202,7 @@ KEEP_ORIGINALS=true
         """Return the (valid) destination directory."""
         return self._destdir
 
+#-------------------------------------------------------------------------
 class FPFileInfo(object):
     """This class provides filesystem and EXIF data about an image file."""
 
@@ -308,34 +312,26 @@ class FPFileInfo(object):
         """Returns path of new image file"""
         return self.new_path
 
-    def rotate_and_save_picture(self, filename, degrees):
-        """Rotate image by <degrees> and replace the original image with the rotated one.
-        """
-        self.logger.debug(u"Rotating image by %s degrees, saving to %s",
-                          degrees, filename)
-
-        new_image = self.image.rotate(degrees, expand=True)
-        new_image.save(filename)
-
     def rotate_and_copy_picture(self):
         """Rotate image in <filename> according to its EXIF data
         """
         self.logger.debug(u"rotate_picture_according_exif called with file %s", self.path)
 
         self.rotation_type = ""
+        new_filename = self.get_new_filename()
 
         if self.orientation == 1:
-            shutil.copy(self.path, self.get_new_filename())
+            shutil.copy(self.path, new_filename)
         elif self.orientation == 6:
             self.rotation_type = u" (rotated 90° ccw)"
-            self.rotate_and_save_picture(self.get_new_filename(), -90)
+            self.image.rotate(-90, expand=True).save(new_filename)
         elif self.orientation == 8:
             self.rotation_type = u" (rotated 90° cw)"
-            self.rotate_and_save_picture(self.get_new_filename(), 90)
+            self.image.rotate(90, expand=True).save(new_filename)
         else:
             self.logger.warn(u"Found unknown/unhandled orientation %s -- " +
                              u"orientation not changed", self.orientation)
-            shutil.copy(self.path, self.get_new_filename())
+            shutil.copy(self.path, new_filename)
 
     def remove_source_file(self):
         """Removes the souce image file."""
@@ -345,6 +341,7 @@ class FPFileInfo(object):
     def get_rotation_type(self):
         return self.rotation_type
 
+#-------------------------------------------------------------------------
 class Fetchphotos(object):
     """This class encapsulates the functionality of the fetchphotos application"""
 
@@ -472,13 +469,6 @@ class Fetchphotos(object):
         logger.debug("logging initialized")
 
         return logger
-    # cmdline parsing
-    USAGE = "\n\
-             %prog [options] FIXXME ...\n\
-    \n\
-    FIXXME\n\
-    \n\
-    Run %prog --help for usage hints"
 
     def get_filenames_to_process(self):
         """Get a list of the files that should be copied.
@@ -489,12 +479,13 @@ class Fetchphotos(object):
             self.logger.debug("Setting files to %s", self.args.filelist)
             files = self.args.filelist
         else:
-            # Note that fnmatch.filter is not case-sensitive
-            files = [os.path.join(self.cfg.get_sourcedir(),
-                                  fname) for fname in
-                     sorted([n for n in os.listdir(self.cfg.get_sourcedir()) if
-
-                             re.search(r'\.jpg$', n, flags=re.I)])]
+            # Look for all .jpg files in the source directory
+            # The '.jpg' search is not case sensitive
+            files = [os.path.join(self.cfg.get_sourcedir(), fname)
+                     for fname in sorted(
+                             [n for n in os.listdir(self.cfg.get_sourcedir()) if re.search(r'\.jpg$', n, flags=re.I)]
+                     )
+            ]
 
             self.logger.debug("Checking files in %s, got %s",
                               self.cfg.get_sourcedir(),
@@ -542,6 +533,12 @@ def main(argv):
     """Main routine for fetchphotos"""
     fetchp = Fetchphotos(argv)
     fetchp.main()
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv)
+    except KeyboardInterrupt:
+        logging.info("Received KeyboardInterrupt")
 
 ## END OF FILE #################################################################
 # vim:foldmethod=indent expandtab ai ft=python tw=120 fileencoding=utf-8 shiftwidth=4
