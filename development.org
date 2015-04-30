@@ -22,8 +22,8 @@
 ** basic work-flow
 
 - [ ] check if data is in mountpoint
-- [ ] check destdir found
-- [X] create tempdir
+- [X] check destdir found
+- [X] create tempdir (
 - [ ] notify user of dlownload-time
 - [x] lower all filenames
 - [x] rotate JPEG
@@ -135,6 +135,7 @@ CLOSED: [2015-02-27 Fri 10:47]
 
 http://growl.info/documentation/developer/python-support.php
 
-** NEXT lowerall in python
+** DONE NEXT lowerall in python
+   CLOSED: [2015-04-20 Mon 21:00]
 ** NEXT python and notifications with Linux
 

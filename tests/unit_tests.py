@@ -12,38 +12,81 @@ This file contains the unit tests for the fetchphotos project.
 ## invoke tests using the call_tests.sh script in this directory
 
 import ConfigParser
-import unittest
 import fetchphotos
-import re
 import logging
+import os
+import re
+import unittest
 
+# # Adapted from: http://stackoverflow.com/a/22434262
+# @contextmanager
+# def redirect_stdout_stderr(new_target, capture_stderr=False):
 
-class TestMethods(unittest.TestCase):
+#     if capture_stderr:
+#         old_stderr, sys.stderr = sys.stderr, new_target # replace sys.stdout
+
+#     old_target, sys.stdout = sys.stdout, new_target # replace sys.stdout
+#     try:
+#         yield new_target # run some code with the replaced stdout
+#     finally:
+#         sys.stdout = old_target # restore to the previous value
+#         if capture_stderr:
+#             sys.stderr = old_stderr
+
+def null_routine(self):
+    # pylint: disable=unused-argument
+    pass
+
+def short_initialize(self):
+    self._cfgname = self.get_config_filename()
+
+class TestConfigMethods(unittest.TestCase):
     """Unit tests for low-level methods in fetchphotos.py"""
     def setUp(self):
         """fetchphotos needs logging to be initialized"""
-        fetchphotos.initialize_logging(False, False)
-        fetchphotos.fp_logger.setLevel(logging.CRITICAL)
+        logging.basicConfig(level=logging.DEBUG)
+        self.logger = logging.getLogger(u"Tester")
+        self.logger.setLevel(logging.CRITICAL)
 
     def test_check_getconfig(self):
         """Complain if the configuration file doesn't exist."""
-        with self.assertRaisesRegexp(IOError, 'No such file or directory:'):
-            fetchphotos.get_config_parser("hoo")
+        logging.basicConfig(level=logging.DEBUG)
+
+        with self.assertRaisesRegexp(IOError, u'No such file or directory:'):
+            fetchphotos.FetchphotosConfig(self.logger, u"hoo")
 
         # Make sure it works with non-ascii
-        with self.assertRaises(IOError) as exc:
-            fetchphotos.get_config_parser("«boo»")
-
-        # We can't just use assertRaisesRegexp here because of
-        # regexp+Unicode issues in the unittest regexp code.
-        self.assertTrue(re.search(r'No such file or directory',
-                                  exc.exception.strerror))
-
-    def test_check_tempdir(self):
-        self.assertEqual(1, 1)
+        with self.assertRaisesRegexp(IOError, u'No such file or directory:'):
+            fetchphotos.FetchphotosConfig(self.logger, u"«boo»")
 
     def tearDown(self):
         pass
+
+class TestConfigMethodsWithoutInit(unittest.TestCase):
+    """Unit tests for low-level methods in fetchphotos.py"""
+    def setUp(self):
+        """fetchphotos needs logging to be initialized"""
+        logging.basicConfig(level=logging.DEBUG)
+        self.logger = logging.getLogger(u"Tester")
+
+        self.logger.setLevel(logging.CRITICAL)
+
+        self.old_init = fetchphotos.FetchphotosConfig.initialize
+        fetchphotos.FetchphotosConfig.initialize = short_initialize
+        self.gone_files = list()
+
+    def test_gen_config(self):
+        """Make sure generate_configfile works"""
+
+        fetchphotos.FetchphotosConfig(self.logger, u"«boo»", gen_file=True)
+        self.assertTrue(os.path.isfile(u"«boo»"))
+        self.gone_files.append(u"«boo»")
+
+    def tearDown(self):
+        fetchphotos.FetchphotosConfig.initialize = self.old_init
+        for filename in self.gone_files:
+            if os.path.isfile(filename):
+                os.unlink(filename)
 
 class TestConfigCheckers(unittest.TestCase):
     """Test the behavior of the configuration file parser"""
@@ -51,39 +94,17 @@ class TestConfigCheckers(unittest.TestCase):
         """fetchphotos needs logging to be initialized.
         These tests also need a config object.
         """
-        fetchphotos.initialize_logging(False, False)
-        fetchphotos.fp_logger.setLevel(logging.CRITICAL)
-        self.cfg = fetchphotos.get_config_parser("tests/testdata/checker.cfg")
+        logging.basicConfig(level=logging.DEBUG)
+        self.logger = logging.getLogger(u"Tester")
 
-    # Check temp dir
-
-    def test_check_bad_tempdir(self):
-        """TEMPDIR must exist"""
-        self.cfg.set(u'General', u'TEMPDIR', u'«hello»')
-        with self.assertRaises(IOError) as exc:
-            fetchphotos.check_tempdir(self.cfg)
-
-        self.assertTrue(re.search(
-            r'The digicam temporary directory ".*" does not exist',
-            exc.exception.strerror))
-
-    def test_check_unset_tempdir(self):
-        """TEMPDIR must be set in the configuration file."""
-        self.cfg.set(u'General', u'TEMPDIR', u'/path-to/foo')
-        with self.assertRaises(ValueError):
-            fetchphotos.check_tempdir(self.cfg)
-
-    def test_check_no_tempdir(self):
-        """There must be a TEMPDIR setting in the configuration file."""
-        self.cfg.remove_option(u'General', u'TEMPDIR')
-        with self.assertRaises(ConfigParser.NoOptionError):
-            fetchphotos.check_tempdir(self.cfg)
-
-    def test_check_good_tempdir(self):
-        """Happy case"""
-        self.cfg.set(u'General', u'TEMPDIR', u'./')
-        fetchphotos.check_tempdir(self.cfg)
-        self.assertEqual(1, 1) # No exceptions
+        self.logger.setLevel(logging.CRITICAL)
+        self.old_init = fetchphotos.FetchphotosConfig.initialize
+        fetchphotos.FetchphotosConfig.initialize = null_routine
+        self.fpc = fetchphotos.FetchphotosConfig(self.logger,
+                                                 u"tests/testdata/checker.cfg")
+        self.fpc._cfgname = self.fpc.get_config_filename()
+        self.fpc.config = self.fpc.set_config_parser()
+        self.cfg = self.fpc.config
 
     # Check source dir
 
@@ -91,7 +112,7 @@ class TestConfigCheckers(unittest.TestCase):
         """DIGICAMDIR must exist"""
         self.cfg.set(u'General', u'DIGICAMDIR', u'«hello»')
         with self.assertRaises(IOError) as exc:
-            fetchphotos.check_sourcedir(self.cfg)
+            self.fpc.check_sourcedir()
 
         self.assertTrue(re.search(
             r'The digicam photo directory ".*" does not exist',
@@ -100,19 +121,19 @@ class TestConfigCheckers(unittest.TestCase):
     def test_check_unset_sourcedir(self):
         """DIGICAMDIR must be set in the configuration file."""
         self.cfg.set(u'General', u'DIGICAMDIR', u'/path-to/foo')
-        with self.assertRaises(ValueError):
-            fetchphotos.check_sourcedir(self.cfg)
+        self.fpc._srcdir = self.fpc.check_sourcedir()
+        self.assertFalse(self.fpc.config_file_is_ok())
 
     def test_check_no_sourcedir(self):
         """There must be a DIGICAMDIR setting in the configuration file."""
         self.cfg.remove_option(u'General', u'DIGICAMDIR')
         with self.assertRaises(ConfigParser.NoOptionError):
-            fetchphotos.check_sourcedir(self.cfg)
+            self.fpc.check_sourcedir()
 
     def test_check_good_sourcedir(self):
         """Happy case"""
         self.cfg.set(u'General', u'DIGICAMDIR', u'./')
-        fetchphotos.check_sourcedir(self.cfg)
+        self.fpc.check_sourcedir()
         self.assertEqual(1, 1) # No exceptions
 
     # Check destination dir
@@ -121,7 +142,7 @@ class TestConfigCheckers(unittest.TestCase):
         """DESTINATIONDIR must exist"""
         self.cfg.set(u'General', u'DESTINATIONDIR', u'«hello»')
         with self.assertRaises(IOError) as exc:
-            fetchphotos.check_destdir(self.cfg)
+            self.fpc.check_destdir()
 
         self.assertTrue(re.search(
             r'The digicam destination directory ".*" does not exist',
@@ -130,23 +151,23 @@ class TestConfigCheckers(unittest.TestCase):
     def test_check_unset_destdir(self):
         """DESTINATIONDIR must be set in the configuration file."""
         self.cfg.set(u'General', u'DESTINATIONDIR', u'/path-to/foo')
-        with self.assertRaises(ValueError):
-            fetchphotos.check_destdir(self.cfg)
+        self.fpc._destdir = self.fpc.check_destdir()
+        self.assertFalse(self.fpc.config_file_is_ok())
 
     def test_check_no_destdir(self):
         """There must be a DESTINATIONDIR setting in the configuration file."""
         self.cfg.remove_option(u'General', u'DESTINATIONDIR')
         with self.assertRaises(ConfigParser.NoOptionError):
-            fetchphotos.check_destdir(self.cfg)
+            self.fpc.check_destdir()
 
     def test_check_good_destdir(self):
         """Happy case"""
         self.cfg.set(u'General', u'DESTINATIONDIR', u'./')
-        fetchphotos.check_destdir(self.cfg)
+        self.fpc.check_destdir()
         self.assertEqual(1, 1) # No exceptions
 
     def tearDown(self):
-        pass
+        fetchphotos.FetchphotosConfig.initialize = self.old_init
 
 
 if __name__ == '__main__':
